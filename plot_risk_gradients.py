@@ -9,11 +9,12 @@ Created on Wed May 22 13:06:45 2019
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
+import seaborn as sns #; sns.set(color_codes=False)
 import scipy.stats as stats
 
 df = pd.read_csv('/Users/nbaya/Documents/lab/prs/gps_6dis_alex_4.25.19.csv.gz',compression='gzip')
 df = df.rename(index=str,columns={'bmi1':'bmi'})
+no_nan = df.loc[False==np.isnan(df.gpsbmi)].copy()  #remove NaNs from gpsbmi to ensure bivariate plot for BMI works
 
 """
 field descriptions:
@@ -86,17 +87,45 @@ def risk_gradient(df, disease, x_axis='percentile',y_axis='avg_gps'):
     plt.close()
 
 
-for disease, disease_name in diseases.items():
+for disease, fullname in diseases.items():
     x_axis, y_axis = 'percentile','avg_gps'
     risk_gradient(df, disease,x_axis=x_axis,y_axis=y_axis)
     x_axis='avg_gps'
     for y_axis in ['avg_gps','logit','inv_cdf']:
         risk_gradient(df, disease,x_axis=x_axis,y_axis=y_axis)
 
-no_nan = df.copy()
-no_nan = df.dropna(thresh=1)
-        
-sns.kdeplot(df.bmi, df.gpsbmi)
-stats.pearsonr(df.bmi,df.gpsbmi)
-df.loc[False==np.isnan(df.gpsbmi)]
-np.mean(df.gpsbmi)
+# Plotting bivariate distribution for BMI
+R,p = stats.pearsonr(no_nan.bmi,no_nan.gpsbmi)
+
+fig,ax = plt.subplots(figsize=(6,4))      
+plt.plot(np.linspace(10,40,2),R*(np.linspace(10,40,2)-np.mean(no_nan.bmi)),alpha=0.5)
+sns.kdeplot(no_nan.bmi, no_nan.gpsbmi,n_levels=10,cmap='Blues',ax=ax,shade=True,shade_lowest=False)
+plt.tight_layout()
+fig=plt.gcf()
+fig.savefig(f'/Users/nbaya/Documents/lab/prs/bmi_bivariatekde.png',dpi=600)
+
+
+# Plotting histograms
+for disease, fullname in diseases.items():
+    fig,ax = plt.subplots(figsize=(6,4))
+    if disease=='bmi':
+        plt.hist(no_nan['gps'+disease],50)
+    else:
+        plt.hist(df['gps'+disease],50)
+    plt.title(f'Distribution of PGS for {fullname}')
+    plt.xlabel('PGS')
+    plt.ylabel('Count')
+    plt.tight_layout()
+    plt.xlim([-5,5])
+    plt.ylim([0,24000])
+    fig=plt.gcf()
+    fig.savefig(f'/Users/nbaya/Documents/lab/prs/{disease}_hist.png',dpi=600)
+    
+# Make p-p plot
+for disease, fullname in diseases.items():
+    
+
+
+
+
+
