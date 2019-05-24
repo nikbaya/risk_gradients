@@ -131,10 +131,10 @@ for y_axis, ylabel in ylabel_dict.items():
         plt.scatter(avg_gps,inv_cdf,c=range(1,101),cmap='Blues',vmin=-130,vmax=100,s=20)    
     plt.ylabel(ylabel)
     plt.xlabel('Avg. GPS of percentile bin for BMI')
-    plt.title(f'Risk gradient for {diseases[disease]}')
+    plt.title(f'Risk gradient for severe obesity')
     plt.tight_layout()
     fig=plt.gcf()
-    fig.savefig(f'/Users/nbaya/Documents/lab/risk_gradients/plots/sevobese_riskgradient_xaxisavg_gps_yaxisavg_prev.png',dpi=600)
+    fig.savefig(f'/Users/nbaya/Documents/lab/risk_gradients/plots/sevobese_riskgradient_xaxisavg_gps_yaxis{y_axis}.png',dpi=600)
 
 
 
@@ -168,8 +168,39 @@ for disease, fullname in diseases.items():
     
 # Make p-p plot
 for disease, fullname in diseases.items():
-    
+    for magnify in [10,100]:
+        if disease=='bmi':
+            cdf = np.sort([stats.norm.cdf(x) for x in no_nan['gps'+disease]])
+        else:
+            cdf = np.sort([stats.norm.cdf(x) for x in df['gps'+disease]])
+        x = np.linspace(0,1,len(cdf))
+        fig,ax=plt.subplots(figsize=(6,4))
+        plt.plot(x,cdf,'.',ms=1)
+        plt.plot([0,1],[0,1],'k--',alpha=0.5)
+#        plt.plot(x,x+(cdf-x)*magnify,'r-',lw=1,alpha=0.5)
+        plt.xlabel('expected percentile')
+        plt.ylabel('observed percentile')
+        plt.title(f'P-P plot for GPS of {fullname}\n(||exp-obs||={round(np.linalg.norm(x-cdf),3)})')
+#        plt.legend(['P-P','y=x',f'exp + (obs - exp)*{magnify}'])
+        plt.legend(['P-P','y=x'])
+        plt.xlim([0,1])
+        plt.ylim([0,1])
+        fig=plt.gcf()
+#        fig.savefig(f'/Users/nbaya/Documents/lab/risk_gradients/plots/{disease}_ppplot_magnify{magnify}.png',dpi=600)
+        fig.savefig(f'/Users/nbaya/Documents/lab/risk_gradients/plots/{disease}_ppplot.png',dpi=600)
+        plt.close()
 
+# summary stats for disease GPS
+for disease, fullname in diseases.items():
+    print(f'\nGPS for {fullname}')
+    if disease=='bmi':
+        tmp = no_nan
+    else:
+        tmp = df
+    print(f'mean: {np.mean(tmp["gps"+disease])}')
+    print(f'variance: {np.var(tmp["gps"+disease])}')
+    print(f'skew: {stats.skew(tmp["gps"+disease])}')
+    print(f'kurtosis: {stats.kurtosis(tmp["gps"+disease])}')
 
 
 
