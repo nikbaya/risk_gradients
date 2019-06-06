@@ -71,11 +71,12 @@ def downsample(mt, frac, phen, for_cases=None, seed = None):
     if frac == 1:
         return mt, n, n_cas
     else:
-        print('\n************')
-        print('Downsampling '+('all' if for_cases is None else ('cases'*for_cases+'controls'*(for_cases==0)))+f' by frac = {frac}')
-        print(f'n: {n}')
-        print(f'n_cas: {n_cas}\nn_con: {n-n_cas}\nprevalence: {round(n_cas/n,3)}' if for_cases != None else '')
-        print('************')
+        header = '\n************\n'
+        header += 'Downsampling '+('all' if for_cases is None else ('cases'*for_cases+'controls'*(for_cases==0)))+f' by frac = {frac}\n'
+        header += f'n: {n}\n'
+        header += f'n_cas: {n_cas}\nn_con: {n-n_cas}\nprevalence: {round(n_cas/n,3)}\n' if for_cases != None else ''
+        header += '************'
+        print(header)
         col_key = mt.col_key
         seed = seed if seed is not None else int(str(Env.next_seed())[:8])
         randstate = np.random.RandomState(int(seed)) #seed random state for replicability
@@ -97,17 +98,19 @@ def downsample(mt, frac, phen, for_cases=None, seed = None):
         n_new = mt1.count_cols()
         n_cas_new = mt1.filter_cols(mt1[phen_name]==1).count_cols()
         print('\n************')
-        print(f'n: {n} -> {n_new} ({round(100*n_new/n,3)}%)')
-        print(f'n_cas: {n_cas} -> {n_cas_new} ({round(100*n_cas_new/n_cas,3)}% of original)')
-        print(f'n_con: {n-n_cas} -> {n_new-n_cas_new} ({round(100*(n_new-n_cas_new)/(n-n_cas),3)}% of original)')
-        print(f'prevalence: {round(n_cas/n,3)} -> {round(n_cas_new/n_new,3)} ({round(100*(n_cas_new/n_new)/(n/n_cas),3)}% of original)')
+        print('Finished downsampling')
+        print(f'n: {n} -> {n_new} ({round(100*n_new/n,3)}% of original)')
+        if n_cas != 0 and n_new != 0 :
+            print(f'n_cas: {n_cas} -> {n_cas_new} ({round(100*n_cas_new/n_cas,3)}% of original)')
+            print(f'n_con: {n-n_cas} -> {n_new-n_cas_new} ({round(100*(n_new-n_cas_new)/(n-n_cas),3)}% of original)')
+            print(f'prevalence: {round(n_cas/n,3)} -> {round(n_cas_new/n_new,3)} ({round(100*(n_cas_new/n_new)/(n/n_cas),3)}% of original)')
         print('************')
         return mt1, n_new, n_cas
 
 
 if __name__ == "__main__":    
     header =  '\n*************\n'
-    header += f'Phenotypes to downsample: {[phen_dict[phen]+f" (code: {phen})" for phen in phen_ls]}'
+    header += f'Phenotypes to downsample: {[phen_dict[phen]+f" (code: {phen})" for phen in phen_ls]}\n'
     header += f'Downsampling fractions for all: {frac_all_ls}\n' if frac_all_ls != None else ''
     header += f'Downsampling fractions for cases: {frac_cas_ls}\n' if frac_cas_ls != None else ''
     header += f'Downsampling fractions for controls: {frac_con_ls}\n' if frac_con_ls != None else ''
@@ -120,10 +123,12 @@ if __name__ == "__main__":
     
     for phen in phen_ls:
         mt = get_mt(phen, variant_set)
-        header =  '\n*************\n'
+        print('\n*************\n')
         print(f'Starting phenotype: {phen_dict[phen]} (code: {phen})') 
-        header += '*************'
-    
+        print('*************')
+        
+        type(mt.phen)
+        
         cov_list = [ mt['isFemale'], mt['age'], mt['age_squared'], mt['age_isFemale'],
                         mt['age_squared_isFemale'] ]+ [mt['PC{:}'.format(i)] for i in range(1, 21)] 
         
