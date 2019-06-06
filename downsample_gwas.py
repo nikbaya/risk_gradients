@@ -98,7 +98,7 @@ def downsample(mt, frac, phen, for_cases=None, seed = None):
         n_new = mt1.count_cols()
         n_cas_new = mt1.filter_cols(mt1[phen_name]==1).count_cols()
         print('\n************')
-        print('Finished downsampling')
+        print('Finished downsampling'+('all' if for_cases is None else ('cases'*for_cases+'controls'*(for_cases==0)))+f' by frac = {frac}\n')
         print(f'n: {n} -> {n_new} ({round(100*n_new/n,3)}% of original)')
         if n_cas != 0 and n_new != 0 :
             print(f'n_cas: {n_cas} -> {n_cas_new} ({round(100*n_cas_new/n_cas,3)}% of original)')
@@ -123,14 +123,9 @@ if __name__ == "__main__":
     
     for phen in phen_ls:
         mt = get_mt(phen, variant_set)
-        print('\n*************\n')
+        print('\n*************')
         print(f'Starting phenotype: {phen_dict[phen]} (code: {phen})') 
         print('*************')
-        
-        type(mt.phen)
-        
-        cov_list = [ mt['isFemale'], mt['age'], mt['age_squared'], mt['age_isFemale'],
-                        mt['age_squared_isFemale'] ]+ [mt['PC{:}'.format(i)] for i in range(1, 21)] 
         
         for frac_all in frac_all_ls: #for each downsampling fraction in frac_all_ls
             mt1, _, _ = downsample(mt=mt,frac=frac_all,phen=mt.phen,for_cases=None)
@@ -138,9 +133,12 @@ if __name__ == "__main__":
                 mt2, _, _ = downsample(mt=mt1,frac=frac_cas,phen=mt1.phen,for_cases=1)
                 for frac_con in frac_con_ls:
                     mt3, n, n_cas = downsample(mt=mt2,frac=frac_con,phen=mt2.phen,for_cases=0)
+                    cov_list = [ mt3['isFemale'], mt3['age'], mt3['age_squared'], mt3['age_isFemale'],
+                        mt3['age_squared_isFemale'] ]+ [mt3['PC{:}'.format(i)] for i in range(1, 21)] 
+                    
                     ht = hl.linear_regression_rows(
-                            y=mt.phen,
-                            x=mt.dosage,
+                            y=mt3.phen,
+                            x=mt3.dosage,
                             covariates=[1]+cov_list,
                             pass_through = ['rsid'])
                 
@@ -150,7 +148,9 @@ if __name__ == "__main__":
                     ss_template  = ss_template .key_by('SNP')
                     
                     ss = ss_template.annotate(N = n)
-                    ss = ss.annotate(Z = ht[ss.SNP]['Z'])
+                    ss = ss.annotate(beta = ht[ss.SNP]['beta'])
+                    ss = ss.annotate(se = ht[ss.SNP]['standard_error'])
+                    ss = ss.annotate(pval = ht[ss.SNP]['p_value'])
                     
                     if frac_con == 1 and frac_cas ==1:
                         path = f'{gc_bucket}{phen}.downsampled.n_{n}.tsv.bgz' 
