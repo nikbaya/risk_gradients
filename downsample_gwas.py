@@ -68,40 +68,46 @@ def downsample(mt, frac, phen, for_cases=None, seed = None):
     phen_name = phen._ir.name
     n = mt.count_cols()
     n_cas = mt.filter_cols(mt[phen_name]==1).count_cols()
-    print('************')
-    print('Downsampling '+('all' if for_cases is None else ('cases'*for_cases+'controls'*(for_cases==0))))
-    print(f'n: {n}\nn_cas: {n_cas} ({round(100*n_cas/n,3)}%)\nn_con: {n-n_cas} ({round(100*(1-n_cas/n),3)}%)')
-    print('************')
-    col_key = mt.col_key
-    seed = seed if seed is not None else int(str(Env.next_seed())[:8])
-    randstate = np.random.RandomState(int(seed)) #seed random state for replicability
-    for_cases = bool(for_cases) if for_cases != None else None
-    filter_arg = (mt[phen_name] == (for_cases==0)) if for_cases != None else (hl.is_defined(mt[phen_name])==False)
-    mtA = mt.filter_cols(filter_arg) #keep all individuals in this mt
-    mtB = mt.filter_cols(filter_arg , keep=False) #downsample individuals in this mt
-    mtB = mtB.add_col_index('col_idx_tmpB')
-    mtB = mtB.key_cols_by('col_idx_tmpB')
-    nB = n_cas*for_cases + (n-n_cas)*(for_cases==0) if for_cases is not None else n
-    n_keep = int(nB*frac)
-    labels = ['A']*(n_keep)+['B']*(nB-n_keep)
-    randstate.shuffle(labels)
-    mtB = mtB.annotate_cols(label = hl.literal(labels)[hl.int32(mtB.col_idx_tmpB)])
-    mtB = mtB.filter_cols(mtB.label == 'A')
-    mtB = mtB.key_cols_by(*col_key)
-    mtB = mtB.drop('col_idx_tmpB','label')
-    mt1 = mtA.union_cols(mtB) 
-    n_new = mt1.count_cols()
-    n_cas_new = mt1.filter_cols(mt1[phen_name]==1).count_cols()
-    print('************')
-    print(f'n: {n} -> {n_new}')
-    print(f'n_cas: {n_cas} -> {n_cas_new} ({round(100*n_cas_new/n_new,3)}%)')
-    print(f'n_con: {n-n_cas} -> {n_new-n_cas_new} ({round(100*(1-n_cas_new/n_new),3)}%)')
-    print('************')
-    return mt1, n_new, n_cas
+    if frac == 1:
+        return mt, n, n_cas
+    else:
+        print('\n************')
+        print('Downsampling '+('all' if for_cases is None else ('cases'*for_cases+'controls'*(for_cases==0)))+f' by frac = {frac}')
+        print(f'n: {n}')
+        print(f'n_cas: {n_cas}\nn_con: {n-n_cas}\nprevalence: {round(n_cas/n,3)}' if for_cases != None else '')
+        print('************')
+        col_key = mt.col_key
+        seed = seed if seed is not None else int(str(Env.next_seed())[:8])
+        randstate = np.random.RandomState(int(seed)) #seed random state for replicability
+        for_cases = bool(for_cases) if for_cases != None else None
+        filter_arg = (mt[phen_name] == (for_cases==0)) if for_cases != None else (hl.is_defined(mt[phen_name])==False)
+        mtA = mt.filter_cols(filter_arg) #keep all individuals in this mt
+        mtB = mt.filter_cols(filter_arg , keep=False) #downsample individuals in this mt
+        mtB = mtB.add_col_index('col_idx_tmpB')
+        mtB = mtB.key_cols_by('col_idx_tmpB')
+        nB = n_cas*for_cases + (n-n_cas)*(for_cases==0) if for_cases is not None else n
+        n_keep = int(nB*frac)
+        labels = ['A']*(n_keep)+['B']*(nB-n_keep)
+        randstate.shuffle(labels)
+        mtB = mtB.annotate_cols(label = hl.literal(labels)[hl.int32(mtB.col_idx_tmpB)])
+        mtB = mtB.filter_cols(mtB.label == 'A')
+        mtB = mtB.key_cols_by(*col_key)
+        mtB = mtB.drop('col_idx_tmpB','label')
+        mt1 = mtA.union_cols(mtB) 
+        n_new = mt1.count_cols()
+        n_cas_new = mt1.filter_cols(mt1[phen_name]==1).count_cols()
+        print('\n************')
+        print(f'n: {n} -> {n_new} ({round(100*n_new/n,3)}%)')
+        print(f'n_cas: {n_cas} -> {n_cas_new} ({round(100*n_cas_new/n_cas,3)}% of original)')
+        print(f'n_con: {n-n_cas} -> {n_new-n_cas_new} ({round(100*(n_new-n_cas_new)/(n-n_cas),3)}% of original)')
+        print(f'prevalence: {round(n_cas/n,3)} -> {round(n_cas_new/n_new,3)} ({round(100*(n_cas_new/n_new)/(n/n_cas),3)}% of original)')
+        print('************')
+        return mt1, n_new, n_cas
 
 
 if __name__ == "__main__":    
     header =  '\n*************\n'
+    header += f'Phenotypes to downsample: {[phen_dict[phen]+f" (code: {phen})" for phen in phen_ls]}'
     header += f'Downsampling fractions for all: {frac_all_ls}\n' if frac_all_ls != None else ''
     header += f'Downsampling fractions for cases: {frac_cas_ls}\n' if frac_cas_ls != None else ''
     header += f'Downsampling fractions for controls: {frac_con_ls}\n' if frac_con_ls != None else ''
@@ -113,7 +119,9 @@ if __name__ == "__main__":
     frac_con_ls = [1] if frac_con_ls == None else frac_con_ls
     
     for phen in phen_ls:
-        print(f'Starting phenotype: {phen_dict[phen]} (code: {phen})')    
+        header =  '\n*************\n'
+        print(f'Starting phenotype: {phen_dict[phen]} (code: {phen})') 
+        header += '*************'
         mt = get_mt(phen, variant_set)
     
         cov_list = [ mt['isFemale'], mt['age'], mt['age_squared'], mt['age_isFemale'],
