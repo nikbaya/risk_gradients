@@ -119,10 +119,10 @@ if __name__ == "__main__":
     frac_con_ls = [1] if frac_con_ls == None else frac_con_ls
     
     for phen in phen_ls:
+        mt = get_mt(phen, variant_set)
         header =  '\n*************\n'
         print(f'Starting phenotype: {phen_dict[phen]} (code: {phen})') 
         header += '*************'
-        mt = get_mt(phen, variant_set)
     
         cov_list = [ mt['isFemale'], mt['age'], mt['age_squared'], mt['age_isFemale'],
                         mt['age_squared_isFemale'] ]+ [mt['PC{:}'.format(i)] for i in range(1, 21)] 
