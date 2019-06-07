@@ -79,7 +79,7 @@ def downsample(mt, frac, phen, for_cases=None, seed = None):
         header = '\n************\n'
         header += 'Downsampling '+('all' if for_cases is None else ('cases'*for_cases+'controls'*(for_cases==0)))+f' by frac = {frac}\n'
         header += f'n: {n}\n'
-        header += f'n_cas: {n_cas}\nn_con: {n-n_cas}\nprevalence: {round(n_cas/n,3)}\n' if for_cases != None else ''
+        header += f'n_cas: {n_cas}\nn_con: {n-n_cas}\nprevalence: {round(n_cas/n,6)}\n' if for_cases != None else ''
         header += '************'
         print(header)
         col_key = mt.col_key
@@ -109,8 +109,8 @@ def downsample(mt, frac, phen, for_cases=None, seed = None):
         if n_cas != 0 and n_new != 0 :
             print(f'n_cas: {n_cas} -> {n_cas_new} ({round(100*n_cas_new/n_cas,3)}% of original)')
             print(f'n_con: {n-n_cas} -> {n_new-n_cas_new} ({round(100*(n_new-n_cas_new)/(n-n_cas),3)}% of original)')
-            print(f'prevalence: {round(n_cas/n,3)} -> {round(n_cas_new/n_new,3)} ({round(100*(n_cas_new/n_new)/(n/n_cas),3)}% of original)')
-        print(f'\nTime for downsampling: '+str(round(elapsed.seconds/60, 2))+' minutes')
+            print(f'prevalence: {round(n_cas/n,6)} -> {round(n_cas_new/n_new,6)} ({round(100*(n_cas_new/n_new)/(n_cas/n),6)}% of original)')
+        print(f'Time for downsampling: '+str(round(elapsed.seconds/60, 2))+' minutes')
         print('************')
         return mt1, n_new, n_cas
 
@@ -171,7 +171,7 @@ if __name__ == "__main__":
                     print('\n*************')
                     print(f'Finished GWAS for downsampled phenotype: {phen_dict[phen]} (code: {phen})') 
                     print(f'frac_all = {frac_all}, frac_cas = {frac_cas}, frac_con = {frac_con}')
-                    print(f'\nTime for downsampled GWAS: '+str(round(elapsed_iter.seconds/60, 2))+' minutes')
+                    print(f'Time for downsampled GWAS: '+str(round(elapsed_iter.seconds/60, 2))+' minutes')
                     print('\n*************')
 
         elapsed_phen = dt.datetime.now()-start_phen
@@ -179,7 +179,7 @@ if __name__ == "__main__":
         print(f'Finished phenotype: {phen_dict[phen]} (code: {phen})') 
         print(f'Number of downsampling fraction combinations: {len(frac_all_ls)*len(frac_con_ls)*len(frac_cas_ls)}')
         print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
-        print(f'\nTime for phenotype: '+str(round(elapsed_phen.seconds/60, 2))+' minutes')
+        print(f'Time for phenotype: '+str(round(elapsed_phen.seconds/60, 2))+' minutes')
         print('*************')
             
             
