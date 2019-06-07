@@ -14,6 +14,7 @@ import hail as hl
 import argparse
 import numpy as np
 from hail.utils.java import Env
+import datetime as dt
 
 
 parser = argparse.ArgumentParser(add_help=False)
@@ -61,9 +62,13 @@ def get_mt(phen, variant_set):
     mt1 = mt1.filter_cols(hl.literal(withdrawn_set).contains(mt1['s']),keep=False) 
     mt1 = mt1.key_cols_by('s')
     
-    return mt1
+    n = mt1.count_cols()
+    n_cas = mt1.filter_cols(mt1.phen == 1).count_cols()
+    
+    return mt1, n, n_cas
     
 def downsample(mt, frac, phen, for_cases=None, seed = None):
+    start = dt.datetime.now()
     assert frac <= 1 and frac >= 0, "frac must be in [0,1]"
     phen_name = phen._ir.name
     n = mt.count_cols()
@@ -97,13 +102,15 @@ def downsample(mt, frac, phen, for_cases=None, seed = None):
         mt1 = mtA.union_cols(mtB) 
         n_new = mt1.count_cols()
         n_cas_new = mt1.filter_cols(mt1[phen_name]==1).count_cols()
+        elapsed = dt.datetime.now()-start
         print('\n************')
-        print('Finished downsampling'+('all' if for_cases is None else ('cases'*for_cases+'controls'*(for_cases==0)))+f' by frac = {frac}\n')
+        print('Finished downsampling '+('all' if for_cases is None else ('cases'*for_cases+'controls'*(for_cases==0)))+f' by frac = {frac}')
         print(f'n: {n} -> {n_new} ({round(100*n_new/n,3)}% of original)')
         if n_cas != 0 and n_new != 0 :
             print(f'n_cas: {n_cas} -> {n_cas_new} ({round(100*n_cas_new/n_cas,3)}% of original)')
             print(f'n_con: {n-n_cas} -> {n_new-n_cas_new} ({round(100*(n_new-n_cas_new)/(n-n_cas),3)}% of original)')
             print(f'prevalence: {round(n_cas/n,3)} -> {round(n_cas_new/n_new,3)} ({round(100*(n_cas_new/n_new)/(n/n_cas),3)}% of original)')
+        print(f'\nTime for downsampling: '+str(round(elapsed.seconds/60, 2))+' minutes')
         print('************')
         return mt1, n_new, n_cas
 
@@ -122,17 +129,20 @@ if __name__ == "__main__":
     frac_con_ls = [1] if frac_con_ls == None else frac_con_ls
     
     for phen in phen_ls:
-        mt = get_mt(phen, variant_set)
+        mt, n, n_cas = get_mt(phen, variant_set)
         print('\n*************')
         print(f'Starting phenotype: {phen_dict[phen]} (code: {phen})') 
+        print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
         print('*************')
+        start_phen = dt.datetime.now()
         
-        for frac_all in frac_all_ls: #for each downsampling fraction in frac_all_ls
+        for frac_all in frac_all_ls: 
             mt1, _, _ = downsample(mt=mt,frac=frac_all,phen=mt.phen,for_cases=None)
             for frac_cas in frac_cas_ls:
                 mt2, _, _ = downsample(mt=mt1,frac=frac_cas,phen=mt1.phen,for_cases=1)
                 for frac_con in frac_con_ls:
-                    mt3, n, n_cas = downsample(mt=mt2,frac=frac_con,phen=mt2.phen,for_cases=0)
+                    start_iter = dt.datetime.now()
+                    mt3, n_new, n_cas_new = downsample(mt=mt2,frac=frac_con,phen=mt2.phen,for_cases=0)
                     cov_list = [ mt3['isFemale'], mt3['age'], mt3['age_squared'], mt3['age_isFemale'],
                         mt3['age_squared_isFemale'] ]+ [mt3['PC{:}'.format(i)] for i in range(1, 21)] 
                     
@@ -147,17 +157,30 @@ if __name__ == "__main__":
                     ss_template = hl.read_table('gs://nbaya/rg_sex/hm3.sumstats_template.ht/')
                     ss_template  = ss_template .key_by('SNP')
                     
-                    ss = ss_template.annotate(N = n)
+                    ss = ss_template.annotate(N = n_new)
                     ss = ss.annotate(beta = ht[ss.SNP]['beta'])
                     ss = ss.annotate(se = ht[ss.SNP]['standard_error'])
                     ss = ss.annotate(pval = ht[ss.SNP]['p_value'])
-                    
+
                     if frac_con == 1 and frac_cas ==1:
-                        path = f'{gc_bucket}{phen}.downsampled.n_{n}.tsv.bgz' 
+                        path = f'{gc_bucket}{phen}.downsampled.n_{n_new}of{n}.tsv.bgz' 
                     else:
-                        path = f'{gc_bucket}{phen}.downsampled.n_{n}.n_cas_{n_cas}.tsv.bgz' 
+                        path = f'{gc_bucket}{phen}.downsampled.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.tsv.bgz' 
                     ss.export(path)
-            
+                    elapsed_iter = dt.datetime.now()-start_iter
+                    print('\n*************')
+                    print(f'Finished GWAS for downsampled phenotype: {phen_dict[phen]} (code: {phen})') 
+                    print(f'frac_all = {frac_all}, frac_cas = {frac_cas}, frac_con = {frac_con}')
+                    print(f'\nTime for downsampled GWAS: '+str(round(elapsed_iter.seconds/60, 2))+' minutes')
+                    print('\n*************')
+
+        elapsed_phen = dt.datetime.now()-start_phen
+        print('\n*************')
+        print(f'Finished phenotype: {phen_dict[phen]} (code: {phen})') 
+        print(f'Number of downsampling fraction combinations: {len(frac_all_ls)*len(frac_con_ls)*len(frac_cas_ls)}')
+        print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
+        print(f'\nTime for phenotype: '+str(round(elapsed_phen.seconds/60, 2))+' minutes')
+        print('*************')
             
             
             
