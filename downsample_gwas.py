@@ -22,12 +22,15 @@ parser.add_argument('--phen_ls', nargs='+', type=str, required=True, help="pheno
 parser.add_argument('--frac_all_ls', nargs='+', type=float, required=False, default=None, help="downsampling fraction of all individuals")
 parser.add_argument('--frac_cas_ls', nargs='+', type=float, required=False, default=None, help="downsampling fraction of cases")
 parser.add_argument('--frac_con_ls', nargs='+', type=float, required=False, default=None, help="downsampling fraction of controls")
+parser.add_argument('--seed', type=int, required=False, default=None, help="random seed for replicability")
 args = parser.parse_args()
 
 phen_ls = args.phen_ls
 frac_all_ls = args.frac_all_ls
 frac_cas_ls = args.frac_cas_ls
 frac_con_ls = args.frac_con_ls
+seed = args.seed
+seed = 1 if seed is None else seed
 
 variant_set = 'hm3'
 phen_dict = {
@@ -121,6 +124,7 @@ if __name__ == "__main__":
     header += f'Downsampling fractions for all: {frac_all_ls}\n' if frac_all_ls != None else ''
     header += f'Downsampling fractions for cases: {frac_cas_ls}\n' if frac_cas_ls != None else ''
     header += f'Downsampling fractions for controls: {frac_con_ls}\n' if frac_con_ls != None else ''
+    header += f'Random seed: {seed}\n'
     header += '*************'
     print(header)
     
@@ -137,12 +141,22 @@ if __name__ == "__main__":
         start_phen = dt.datetime.now()
         
         for frac_all in frac_all_ls: 
-            mt1, _, _ = downsample(mt=mt,frac=frac_all,phen=mt.phen,for_cases=None)
+            mt1, _, _ = downsample(mt=mt,frac=frac_all,phen=mt.phen,for_cases=None,seed=seed)
             for frac_cas in frac_cas_ls:
-                mt2, _, _ = downsample(mt=mt1,frac=frac_cas,phen=mt1.phen,for_cases=1)
+                mt2, _, _ = downsample(mt=mt1,frac=frac_cas,phen=mt1.phen,for_cases=1,seed=seed)
                 for frac_con in frac_con_ls:
                     start_iter = dt.datetime.now()
-                    mt3, n_new, n_cas_new = downsample(mt=mt2,frac=frac_con,phen=mt2.phen,for_cases=0)
+                    mt3, n_new, n_cas_new = downsample(mt=mt2,frac=frac_con,phen=mt2.phen,for_cases=0,seed=seed)
+                    
+                    mt3 = mt3.annotate_rows(maf = hl.agg.stats(mt3.dosage).mean)
+                    
+                    if frac_con == 1 and frac_cas ==1:
+                        id_path = f'{gc_bucket}iid.{phen}.n_{n_new}of{n}.seed_{seed}.tsv.bgz' 
+                    else:
+                        id_path = f'{gc_bucket}iid.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}.tsv.bgz' 
+                        
+                    mt3.cols().select_cols('s').export(f'{gc_bucket}{id_path}')
+                    
                     cov_list = [ mt3['isFemale'], mt3['age'], mt3['age_squared'], mt3['age_isFemale'],
                         mt3['age_squared_isFemale'] ]+ [mt3['PC{:}'.format(i)] for i in range(1, 21)] 
                     
@@ -150,7 +164,7 @@ if __name__ == "__main__":
                             y=mt3.phen,
                             x=mt3.dosage,
                             covariates=[1]+cov_list,
-                            pass_through = ['rsid'])
+                            pass_through = ['rsid','maf'])
                 
                     ht = ht.rename({'rsid':'SNP'}).key_by('SNP')
     
@@ -158,14 +172,13 @@ if __name__ == "__main__":
                     ss_template  = ss_template .key_by('SNP')
                     
                     ss = ss_template.annotate(N = n_new)
-                    ss = ss.annotate(beta = ht[ss.SNP]['beta'])
-                    ss = ss.annotate(se = ht[ss.SNP]['standard_error'])
                     ss = ss.annotate(pval = ht[ss.SNP]['p_value'])
+                    ss = ss.annotate(maf = ht[ss.SNP]['maf'])
 
                     if frac_con == 1 and frac_cas ==1:
-                        path = f'{gc_bucket}{phen}.downsampled.n_{n_new}of{n}.tsv.bgz' 
+                        path = f'{gc_bucket}ss.{phen}.n_{n_new}of{n}.seed_{seed}.tsv.bgz' 
                     else:
-                        path = f'{gc_bucket}{phen}.downsampled.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.tsv.bgz' 
+                        path = f'{gc_bucket}ss.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}.tsv.bgz' 
                     ss.export(path)
                     elapsed_iter = dt.datetime.now()-start_iter
                     print('\n*************')
