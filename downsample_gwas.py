@@ -79,14 +79,15 @@ def downsample(mt, frac, phen, for_cases=None, seed = None):
     if frac == 1:
         return mt, n, n_cas
     else:
+        seed = seed if seed is not None else int(str(Env.next_seed())[:8])
         header = '\n************\n'
         header += 'Downsampling '+('all' if for_cases is None else ('cases'*for_cases+'controls'*(for_cases==0)))+f' by frac = {frac}\n'
         header += f'n: {n}\n'
         header += f'n_cas: {n_cas}\nn_con: {n-n_cas}\nprevalence: {round(n_cas/n,6)}\n' if for_cases != None else ''
+        header += f'seed: {seed}\n'
         header += '************'
         print(header)
         col_key = mt.col_key
-        seed = seed if seed is not None else int(str(Env.next_seed())[:8])
         randstate = np.random.RandomState(int(seed)) #seed random state for replicability
         for_cases = bool(for_cases) if for_cases != None else None
         filter_arg = (mt[phen_name] == (for_cases==0)) if for_cases != None else (hl.is_defined(mt[phen_name])==False)
@@ -148,14 +149,13 @@ if __name__ == "__main__":
                     start_iter = dt.datetime.now()
                     mt3, n_new, n_cas_new = downsample(mt=mt2,frac=frac_con,phen=mt2.phen,for_cases=0,seed=seed)
                     
-                    mt3 = mt3.annotate_rows(maf = hl.agg.stats(mt3.dosage).mean)
+                    mt3 = mt3.annotate_rows(maf = hl.agg.stats(mt3.dosage).mean/2)
                     
                     if frac_con == 1 and frac_cas ==1:
                         id_path = f'{gc_bucket}iid.{phen}.n_{n_new}of{n}.seed_{seed}.tsv.bgz' 
                     else:
                         id_path = f'{gc_bucket}iid.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}.tsv.bgz' 
-                        
-                    mt3.cols().select_cols('s').export(f'{gc_bucket}{id_path}')
+                    mt3.cols().key_by().select('s').export(id_path)
                     
                     cov_list = [ mt3['isFemale'], mt3['age'], mt3['age_squared'], mt3['age_isFemale'],
                         mt3['age_squared_isFemale'] ]+ [mt3['PC{:}'.format(i)] for i in range(1, 21)] 
