@@ -23,7 +23,6 @@ parser.add_argument('--frac_all_ls', nargs='+', type=float, required=False, defa
 parser.add_argument('--frac_cas_ls', nargs='+', type=float, required=False, default=None, help="downsampling fraction of cases")
 parser.add_argument('--frac_con_ls', nargs='+', type=float, required=False, default=None, help="downsampling fraction of controls")
 parser.add_argument('--seed', type=int, required=False, default=None, help="random seed for replicability")
-parser.add_argument('--export_to_plink', type=int, required=False, default=0, help="export to PLINK boolean")
 args = parser.parse_args()
 
 phen_ls = args.phen_ls
@@ -32,7 +31,6 @@ frac_cas_ls = args.frac_cas_ls
 frac_con_ls = args.frac_con_ls
 seed = args.seed
 seed = 1 if seed is None else seed
-export_to_plink= bool(args.export_to_plink)
 
 variant_set = 'hm3'
 phen_dict = {
@@ -128,7 +126,6 @@ if __name__ == "__main__":
     header += f'Downsampling fractions for cases: {frac_cas_ls}\n' if frac_cas_ls != None else ''
     header += f'Downsampling fractions for controls: {frac_con_ls}\n' if frac_con_ls != None else ''
     header += f'Random seed: {seed}\n'
-    header += f'Export to PLINK: {export_to_plink}\n'
     header += '*************'
     print(header)
     
@@ -152,59 +149,49 @@ if __name__ == "__main__":
                     start_iter = dt.datetime.now()
                     mt3, n_new, n_cas_new = downsample(mt=mt2,frac=frac_con,phen=mt2.phen,for_cases=0,seed=seed)
                     
-                    if export_to_plink:
-                        print('\n*************')
-                        print('Beginning export to PLINK...')
-                        print('*************')
-                        gt0 = hl.read_matrix_table('gs://phenotype_31063/hail/imputed/ukb31063.GT.autosomes.mt/')
-                        mt3 = mt3.annotate_entries(GT = gt0[(mt3.locus,mt3.alleles),mt3.s].GT)
-                        if frac_con == 1 and frac_cas ==1:
-                            plink_path = f'{gc_bucket}{phen}.n_{n_new}of{n}.seed_{seed}' 
-                        else:
-                            plink_path = f'{gc_bucket}{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}' 
-                        hl.methods.export_plink(dataset=mt3,output=plink_path,call=mt3.GT,ind_id=mt3.s,
-                                                pheno=mt3.phen)
+                    gt0 = hl.read_matrix_table('gs://phenotype_31063/hail/imputed/ukb31063.GT.autosomes.mt/')
+                    mt3 = mt3.annotate_entries(GT = gt0[(mt3.locus,mt3.alleles),mt3.s].GT)
+                    mt3 = mt3.annotate_rows(maf = hl.agg.stats(mt3.dosage).mean/2) # annotate with maf
+                    if frac_con == 1 and frac_cas ==1:
+                        id_path = f'{gc_bucket}iid.{phen}.n_{n_new}of{n}.seed_{seed}.tsv.bgz' 
                     else:
-                        mt3 = mt3.annotate_rows(maf = hl.agg.stats(mt3.dosage).mean/2)
-                        if frac_con == 1 and frac_cas ==1:
-                            id_path = f'{gc_bucket}iid.{phen}.n_{n_new}of{n}.seed_{seed}.tsv.bgz' 
-                        else:
-                            id_path = f'{gc_bucket}iid.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}.tsv.bgz' 
-                        cols = mt3.cols().key_by().select('s')
-                        cols = cols.annotate_cols(iid=cols.s).annotate_cols(s=1).rename({'s':'fid'}).export(id_path)
-                        
-                        cov_list = [ mt3['isFemale'], mt3['age'], mt3['age_squared'], mt3['age_isFemale'],
-                            mt3['age_squared_isFemale'] ]+ [mt3['PC{:}'.format(i)] for i in range(1, 21)] 
-                        
-                        ht = hl.linear_regression_rows(
-                                y=mt3.phen,
-                                x=mt3.dosage,
-                                covariates=[1]+cov_list,
-                                pass_through = ['rsid','maf'])
+                        id_path = f'{gc_bucket}iid.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}.tsv.bgz' 
+                    cols = mt3.cols().key_by().select('s')
+                    cols = cols.annotate(iid=cols.s).annotate(s=1).rename({'s':'fid'}).export(id_path)
                     
-                        ht = ht.rename({'rsid':'SNP'}).key_by('SNP')
-        
-                        ss_template = hl.read_table('gs://nbaya/rg_sex/hm3.sumstats_template.ht/')
-                        ss_template  = ss_template.key_by('SNP')
-                        
-                        ss = ss_template.annotate(N = n_new)
-                        locus = hl.str(ht[ss.SNP].locus).split(':')
-                        ss = ss.annotate(ch = locus[0],
-                                         pos = locus[1],
-                                         pval = ht[ss.SNP]['p_value'],
-                                         maf = ht[ss.SNP]['maf'])
+                    cov_list = [ mt3['isFemale'], mt3['age'], mt3['age_squared'], mt3['age_isFemale'],
+                        mt3['age_squared_isFemale'] ]+ [mt3['PC{:}'.format(i)] for i in range(1, 21)] 
+                    
+                    ht = hl.linear_regression_rows(
+                            y=mt3.phen,
+                            x=mt3.dosage,
+                            covariates=[1]+cov_list,
+                            pass_through = ['rsid','maf'])
+                
+                    ht = ht.rename({'rsid':'SNP'}).key_by('SNP')
     
-                        if frac_con == 1 and frac_cas ==1:
-                            path = f'{gc_bucket}ss.{phen}.n_{n_new}of{n}.seed_{seed}.tsv.bgz' 
-                        else:
-                            path = f'{gc_bucket}ss.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}.tsv.bgz' 
-                        ss.export(path)
-                        elapsed_iter = dt.datetime.now()-start_iter
-                        print('\n*************')
-                        print(f'Finished GWAS for downsampled phenotype: {phen_dict[phen]} (code: {phen})') 
-                        print(f'frac_all = {frac_all}, frac_cas = {frac_cas}, frac_con = {frac_con}')
-                        print(f'Time for downsampled GWAS: '+str(round(elapsed_iter.seconds/60, 2))+' minutes')
-                        print('*************')
+                    ss_template = hl.read_table('gs://nbaya/rg_sex/hm3.sumstats_template.ht/')
+                    ss_template  = ss_template.key_by('SNP')
+                    
+                    ss = ss_template.annotate(N = n_new)
+                    locus = hl.str(ht[ss.SNP].locus).split(':')
+                    ss = ss.annotate(ch = locus[0],
+                                     pos = locus[1].split('_')[0],
+                                     pval = ht[ss.SNP]['p_value'],
+                                     maf = ht[ss.SNP]['maf'],
+                                     eff = ht[ss.SNP]['beta'])
+
+                    if frac_con == 1 and frac_cas ==1:
+                        path = f'{gc_bucket}ss.{phen}.n_{n_new}of{n}.seed_{seed}.tsv.bgz' 
+                    else:
+                        path = f'{gc_bucket}ss.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}.tsv.bgz' 
+                    ss.export(path)
+                    elapsed_iter = dt.datetime.now()-start_iter
+                    print('\n*************')
+                    print(f'Finished GWAS for downsampled phenotype: {phen_dict[phen]} (code: {phen})') 
+                    print(f'frac_all = {frac_all}, frac_cas = {frac_cas}, frac_con = {frac_con}')
+                    print(f'Time for downsampled GWAS: '+str(round(elapsed_iter.seconds/60, 2))+' minutes')
+                    print('*************')
 
         elapsed_phen = dt.datetime.now()-start_phen
         print('\n*************')

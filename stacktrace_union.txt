@@ -1,0 +1,205 @@
+---------------------------------------------------------------------------
+FatalError                                Traceback (most recent call last)
+<ipython-input-45-8d9e76be5d37> in <module>()
+----> 1 tb1.export('gs://nbaya/risk_gradients/info_scores.tsv.bgz')
+
+<decorator-gen-926> in export(self, output, types_file, header, parallel, delimiter)
+
+/home/hail/hail.zip/hail/typecheck/check.py in wrapper(__original_func, *args, **kwargs)
+    559     def wrapper(__original_func, *args, **kwargs):
+    560         args_, kwargs_ = check_all(__original_func, args, kwargs, checkers, is_method=is_method)
+--> 561         return __original_func(*args_, **kwargs_)
+    562 
+    563     return wrapper
+
+/home/hail/hail.zip/hail/table.py in export(self, output, types_file, header, parallel, delimiter)
+   1006         Env.backend().execute(
+   1007             TableWrite(self._tir, TableTextWriter(output, types_file, header,
+-> 1008                                                   Env.hail().utils.ExportType.getExportType(parallel), delimiter)))
+   1009 
+   1010     def group_by(self, *exprs, **named_exprs) -> 'GroupedTable':
+
+/home/hail/hail.zip/hail/backend/backend.py in execute(self, ir)
+     91         return ir.typ._from_json(
+     92             Env.hail().backend.spark.SparkBackend.executeJSON(
+---> 93                 self._to_java_ir(ir)))
+     94 
+     95     def value_type(self, ir):
+
+/usr/lib/spark/python/lib/py4j-0.10.7-src.zip/py4j/java_gateway.py in __call__(self, *args)
+   1255         answer = self.gateway_client.send_command(command)
+   1256         return_value = get_return_value(
+-> 1257             answer, self.gateway_client, self.target_id, self.name)
+   1258 
+   1259         for temp_arg in temp_args:
+
+/home/hail/hail.zip/hail/utils/java.py in deco(*args, **kwargs)
+    226             raise FatalError('%s\n\nJava stack trace:\n%s\n'
+    227                              'Hail version: %s\n'
+--> 228                              'Error summary: %s' % (deepest, full, hail.__version__, deepest)) from None
+    229         except pyspark.sql.utils.CapturedException as e:
+    230             raise FatalError('%s\n\nJava stack trace:\n%s\n'
+
+FatalError: HailException: array index out of bounds: 1 / 1. IR: (ArrayRef
+  (Apply split
+    (GetField f0
+      (In Struct{f0:String,f1:String,f2:Int32,f3:String,f4 ...
+
+Java stack trace:
+org.apache.spark.SparkException: Job aborted due to stage failure: Task 1227 in stage 240.0 failed 20 times, most recent failure: Lost task 1227.19 in stage 240.0 (TID 10441, ukbb-nb-w-4.c.ukbb-round2.internal, executor 22): is.hail.utils.HailException: array index out of bounds: 1 / 1. IR: (ArrayRef
+  (Apply split
+    (GetField f0
+      (In Struct{f0:String,f1:String,f2:Int32,f3:String,f4 ...
+	at is.hail.codegen.generated.C135.method1(Unknown Source)
+	at is.hail.codegen.generated.C135.apply(Unknown Source)
+	at is.hail.codegen.generated.C135.apply(Unknown Source)
+	at is.hail.expr.ir.TableMapRows$$anonfun$41$$anonfun$apply$12.apply(TableIR.scala:921)
+	at is.hail.expr.ir.TableMapRows$$anonfun$41$$anonfun$apply$12.apply(TableIR.scala:920)
+	at scala.collection.Iterator$$anon$11.next(Iterator.scala:409)
+	at scala.collection.Iterator$$anon$12.next(Iterator.scala:444)
+	at scala.collection.Iterator$$anon$11.next(Iterator.scala:409)
+	at scala.collection.Iterator$$anon$12.next(Iterator.scala:444)
+	at is.hail.rvd.RVDPartitionInfo$$anonfun$apply$1.apply(RVDPartitionInfo.scala:46)
+	at is.hail.rvd.RVDPartitionInfo$$anonfun$apply$1.apply(RVDPartitionInfo.scala:38)
+	at is.hail.utils.package$.using(package.scala:594)
+	at is.hail.rvd.RVDPartitionInfo$.apply(RVDPartitionInfo.scala:38)
+	at is.hail.rvd.RVD$$anonfun$35.apply(RVD.scala:1056)
+	at is.hail.rvd.RVD$$anonfun$35.apply(RVD.scala:1054)
+	at is.hail.sparkextras.ContextRDD$$anonfun$cmapPartitionsWithIndex$1$$anonfun$apply$32.apply(ContextRDD.scala:422)
+	at is.hail.sparkextras.ContextRDD$$anonfun$cmapPartitionsWithIndex$1$$anonfun$apply$32.apply(ContextRDD.scala:422)
+	at is.hail.sparkextras.ContextRDD$$anonfun$run$1$$anonfun$apply$8.apply(ContextRDD.scala:192)
+	at is.hail.sparkextras.ContextRDD$$anonfun$run$1$$anonfun$apply$8.apply(ContextRDD.scala:192)
+	at scala.collection.Iterator$$anon$12.nextCur(Iterator.scala:434)
+	at scala.collection.Iterator$$anon$12.hasNext(Iterator.scala:440)
+	at scala.collection.Iterator$class.foreach(Iterator.scala:893)
+	at scala.collection.AbstractIterator.foreach(Iterator.scala:1336)
+	at scala.collection.generic.Growable$class.$plus$plus$eq(Growable.scala:59)
+	at scala.collection.mutable.ArrayBuffer.$plus$plus$eq(ArrayBuffer.scala:104)
+	at scala.collection.mutable.ArrayBuffer.$plus$plus$eq(ArrayBuffer.scala:48)
+	at scala.collection.TraversableOnce$class.to(TraversableOnce.scala:310)
+	at scala.collection.AbstractIterator.to(Iterator.scala:1336)
+	at scala.collection.TraversableOnce$class.toBuffer(TraversableOnce.scala:302)
+	at scala.collection.AbstractIterator.toBuffer(Iterator.scala:1336)
+	at scala.collection.TraversableOnce$class.toArray(TraversableOnce.scala:289)
+	at scala.collection.AbstractIterator.toArray(Iterator.scala:1336)
+	at org.apache.spark.rdd.RDD$$anonfun$collect$1$$anonfun$13.apply(RDD.scala:944)
+	at org.apache.spark.rdd.RDD$$anonfun$collect$1$$anonfun$13.apply(RDD.scala:944)
+	at org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:2069)
+	at org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:2069)
+	at org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:87)
+	at org.apache.spark.scheduler.Task.run(Task.scala:109)
+	at org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:344)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+	at java.lang.Thread.run(Thread.java:748)
+
+Driver stacktrace:
+	at org.apache.spark.scheduler.DAGScheduler.org$apache$spark$scheduler$DAGScheduler$$failJobAndIndependentStages(DAGScheduler.scala:1575)
+	at org.apache.spark.scheduler.DAGScheduler$$anonfun$abortStage$1.apply(DAGScheduler.scala:1563)
+	at org.apache.spark.scheduler.DAGScheduler$$anonfun$abortStage$1.apply(DAGScheduler.scala:1562)
+	at scala.collection.mutable.ResizableArray$class.foreach(ResizableArray.scala:59)
+	at scala.collection.mutable.ArrayBuffer.foreach(ArrayBuffer.scala:48)
+	at org.apache.spark.scheduler.DAGScheduler.abortStage(DAGScheduler.scala:1562)
+	at org.apache.spark.scheduler.DAGScheduler$$anonfun$handleTaskSetFailed$1.apply(DAGScheduler.scala:803)
+	at org.apache.spark.scheduler.DAGScheduler$$anonfun$handleTaskSetFailed$1.apply(DAGScheduler.scala:803)
+	at scala.Option.foreach(Option.scala:257)
+	at org.apache.spark.scheduler.DAGScheduler.handleTaskSetFailed(DAGScheduler.scala:803)
+	at org.apache.spark.scheduler.DAGSchedulerEventProcessLoop.doOnReceive(DAGScheduler.scala:1790)
+	at org.apache.spark.scheduler.DAGSchedulerEventProcessLoop.onReceive(DAGScheduler.scala:1745)
+	at org.apache.spark.scheduler.DAGSchedulerEventProcessLoop.onReceive(DAGScheduler.scala:1734)
+	at org.apache.spark.util.EventLoop$$anon$1.run(EventLoop.scala:48)
+	at org.apache.spark.scheduler.DAGScheduler.runJob(DAGScheduler.scala:619)
+	at org.apache.spark.SparkContext.runJob(SparkContext.scala:2029)
+	at org.apache.spark.SparkContext.runJob(SparkContext.scala:2050)
+	at org.apache.spark.SparkContext.runJob(SparkContext.scala:2069)
+	at org.apache.spark.SparkContext.runJob(SparkContext.scala:2094)
+	at org.apache.spark.rdd.RDD$$anonfun$collect$1.apply(RDD.scala:944)
+	at org.apache.spark.rdd.RDDOperationScope$.withScope(RDDOperationScope.scala:151)
+	at org.apache.spark.rdd.RDDOperationScope$.withScope(RDDOperationScope.scala:112)
+	at org.apache.spark.rdd.RDD.withScope(RDD.scala:362)
+	at org.apache.spark.rdd.RDD.collect(RDD.scala:943)
+	at is.hail.sparkextras.ContextRDD.collect(ContextRDD.scala:196)
+	at is.hail.rvd.RVD$.getKeyInfo(RVD.scala:1060)
+	at is.hail.rvd.RVD$.makeCoercer(RVD.scala:1124)
+	at is.hail.rvd.RVD$.coerce(RVD.scala:1082)
+	at is.hail.rvd.RVD.changeKey(RVD.scala:105)
+	at is.hail.rvd.RVD.changeKey(RVD.scala:102)
+	at is.hail.rvd.RVDType$$anonfun$enforceKey$4.apply(RVDType.scala:156)
+	at is.hail.rvd.RVDType$$anonfun$enforceKey$4.apply(RVDType.scala:156)
+	at is.hail.expr.ir.TableKeyBy.execute(TableIR.scala:259)
+	at is.hail.expr.ir.TableLeftJoinRightDistinct.execute(TableIR.scala:773)
+	at is.hail.expr.ir.TableFilter.execute(TableIR.scala:333)
+	at is.hail.expr.ir.TableMapRows.execute(TableIR.scala:800)
+	at is.hail.expr.ir.Interpret$.apply(Interpret.scala:754)
+	at is.hail.expr.ir.Interpret$.apply(Interpret.scala:87)
+	at is.hail.expr.ir.CompileAndEvaluate$.apply(CompileAndEvaluate.scala:31)
+	at is.hail.backend.spark.SparkBackend$.execute(SparkBackend.scala:49)
+	at is.hail.backend.spark.SparkBackend$.executeJSON(SparkBackend.scala:16)
+	at is.hail.backend.spark.SparkBackend.executeJSON(SparkBackend.scala)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at py4j.reflection.MethodInvoker.invoke(MethodInvoker.java:244)
+	at py4j.reflection.ReflectionEngine.invoke(ReflectionEngine.java:357)
+	at py4j.Gateway.invoke(Gateway.java:282)
+	at py4j.commands.AbstractCommand.invokeMethod(AbstractCommand.java:132)
+	at py4j.commands.CallCommand.execute(CallCommand.java:79)
+	at py4j.GatewayConnection.run(GatewayConnection.java:238)
+	at java.lang.Thread.run(Thread.java:748)
+
+is.hail.utils.HailException: array index out of bounds: 1 / 1. IR: (ArrayRef
+  (Apply split
+    (GetField f0
+      (In Struct{f0:String,f1:String,f2:Int32,f3:String,f4 ...
+	at is.hail.codegen.generated.C135.method1(Unknown Source)
+	at is.hail.codegen.generated.C135.apply(Unknown Source)
+	at is.hail.codegen.generated.C135.apply(Unknown Source)
+	at is.hail.expr.ir.TableMapRows$$anonfun$41$$anonfun$apply$12.apply(TableIR.scala:921)
+	at is.hail.expr.ir.TableMapRows$$anonfun$41$$anonfun$apply$12.apply(TableIR.scala:920)
+	at scala.collection.Iterator$$anon$11.next(Iterator.scala:409)
+	at scala.collection.Iterator$$anon$12.next(Iterator.scala:444)
+	at scala.collection.Iterator$$anon$11.next(Iterator.scala:409)
+	at scala.collection.Iterator$$anon$12.next(Iterator.scala:444)
+	at is.hail.rvd.RVDPartitionInfo$$anonfun$apply$1.apply(RVDPartitionInfo.scala:46)
+	at is.hail.rvd.RVDPartitionInfo$$anonfun$apply$1.apply(RVDPartitionInfo.scala:38)
+	at is.hail.utils.package$.using(package.scala:594)
+	at is.hail.rvd.RVDPartitionInfo$.apply(RVDPartitionInfo.scala:38)
+	at is.hail.rvd.RVD$$anonfun$35.apply(RVD.scala:1056)
+	at is.hail.rvd.RVD$$anonfun$35.apply(RVD.scala:1054)
+	at is.hail.sparkextras.ContextRDD$$anonfun$cmapPartitionsWithIndex$1$$anonfun$apply$32.apply(ContextRDD.scala:422)
+	at is.hail.sparkextras.ContextRDD$$anonfun$cmapPartitionsWithIndex$1$$anonfun$apply$32.apply(ContextRDD.scala:422)
+	at is.hail.sparkextras.ContextRDD$$anonfun$run$1$$anonfun$apply$8.apply(ContextRDD.scala:192)
+	at is.hail.sparkextras.ContextRDD$$anonfun$run$1$$anonfun$apply$8.apply(ContextRDD.scala:192)
+	at scala.collection.Iterator$$anon$12.nextCur(Iterator.scala:434)
+	at scala.collection.Iterator$$anon$12.hasNext(Iterator.scala:440)
+	at scala.collection.Iterator$class.foreach(Iterator.scala:893)
+	at scala.collection.AbstractIterator.foreach(Iterator.scala:1336)
+	at scala.collection.generic.Growable$class.$plus$plus$eq(Growable.scala:59)
+	at scala.collection.mutable.ArrayBuffer.$plus$plus$eq(ArrayBuffer.scala:104)
+	at scala.collection.mutable.ArrayBuffer.$plus$plus$eq(ArrayBuffer.scala:48)
+	at scala.collection.TraversableOnce$class.to(TraversableOnce.scala:310)
+	at scala.collection.AbstractIterator.to(Iterator.scala:1336)
+	at scala.collection.TraversableOnce$class.toBuffer(TraversableOnce.scala:302)
+	at scala.collection.AbstractIterator.toBuffer(Iterator.scala:1336)
+	at scala.collection.TraversableOnce$class.toArray(TraversableOnce.scala:289)
+	at scala.collection.AbstractIterator.toArray(Iterator.scala:1336)
+	at org.apache.spark.rdd.RDD$$anonfun$collect$1$$anonfun$13.apply(RDD.scala:944)
+	at org.apache.spark.rdd.RDD$$anonfun$collect$1$$anonfun$13.apply(RDD.scala:944)
+	at org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:2069)
+	at org.apache.spark.SparkContext$$anonfun$runJob$5.apply(SparkContext.scala:2069)
+	at org.apache.spark.scheduler.ResultTask.runTask(ResultTask.scala:87)
+	at org.apache.spark.scheduler.Task.run(Task.scala:109)
+	at org.apache.spark.executor.Executor$TaskRunner.run(Executor.scala:344)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+	at java.lang.Thread.run(Thread.java:748)
+
+
+
+
+Hail version: 0.2.12-13681278eb89
+Error summary: HailException: array index out of bounds: 1 / 1. IR: (ArrayRef
+  (Apply split
+    (GetField f0
+      (In Struct{f0:String,f1:String,f2:Int32,f3:String,f4 ...
