@@ -32,6 +32,10 @@ frac_con_ls = args.frac_con_ls
 seed = args.seed
 seed = 1 if seed is None else seed
 
+frac_all_ls = [1] if frac_all_ls == None else frac_all_ls
+frac_cas_ls = [1] if frac_cas_ls == None else frac_cas_ls
+frac_con_ls = [1] if frac_con_ls == None else frac_con_ls
+
 variant_set = 'hm3'
 phen_dict = {
     '50':'height',
@@ -128,10 +132,6 @@ if __name__ == "__main__":
     header += f'Random seed: {seed}\n'
     header += '*************'
     print(header)
-    
-    frac_all_ls = [1] if frac_all_ls == None else frac_all_ls
-    frac_cas_ls = [1] if frac_cas_ls == None else frac_cas_ls
-    frac_con_ls = [1] if frac_con_ls == None else frac_con_ls
     
     for phen in phen_ls:
         mt, n, n_cas = get_mt(phen, variant_set)
