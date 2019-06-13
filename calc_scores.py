@@ -111,6 +111,7 @@ if __name__=="__main__":
                     mt2 = mt1.annotate_rows(beta = gwas[mt1.rsid].eff)
                     
                     print('calculating PGS...')
+                    print(f'frac_all: {frac_all}\tfrac_all: {frac_cas}\tfrac_all: {frac_con}')
                     print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
                     start_pgs = dt.datetime.now()
                     mt3 = mt2.annotate_cols(pgs = hl.agg.sum(mt2.dosage*mt2.beta))
@@ -132,9 +133,9 @@ if __name__=="__main__":
                     df1 = df[df.s.isin(iid.iid.tolist())]
                     r_sub, pval_sub = stats.pearsonr(df1.pgs,df1.phen)
                     print('\n****************************')
-                    print(f'PGS x phenotype correlation for all {n} individuals')
+                    print(f'PGS-phenotype correlation for all {n} individuals')
                     print(f'r = {r_all}, pval = {pval_all}')
-                    print(f'PGS x phenotype correlation for all {n_new} individuals')
+                    print(f'PGS-phenotype correlation for all {n_new} individuals')
                     print(f'r = {r_sub}, pval = {pval_sub}')
                     print('****************************')
                     array = [[r_all, pval_all],[r_sub, pval_sub]]
