@@ -15,6 +15,7 @@ import argparse
 import numpy as np
 from hail.utils.java import Env
 import datetime as dt
+import subprocess
 
 
 parser = argparse.ArgumentParser(add_help=False)
@@ -22,7 +23,7 @@ parser.add_argument('--phen_ls', nargs='+', type=str, required=True, help="pheno
 parser.add_argument('--frac_all_ls', nargs='+', type=float, required=False, default=None, help="downsampling fraction of all individuals")
 parser.add_argument('--frac_cas_ls', nargs='+', type=float, required=False, default=None, help="downsampling fraction of cases")
 parser.add_argument('--frac_con_ls', nargs='+', type=float, required=False, default=None, help="downsampling fraction of controls")
-parser.add_argument('--seed', type=int, required=False, default=None, help="random seed for replicability")
+parser.add_argument('--seed', type=int, required=False, default=1, help="random seed for replicability")
 args = parser.parse_args()
 
 phen_ls = args.phen_ls
@@ -30,7 +31,6 @@ frac_all_ls = args.frac_all_ls
 frac_cas_ls = args.frac_cas_ls
 frac_con_ls = args.frac_con_ls
 seed = args.seed
-seed = 1 if seed is None else seed
 
 frac_all_ls = [1] if frac_all_ls == None else frac_all_ls
 frac_cas_ls = [1] if frac_cas_ls == None else frac_cas_ls
@@ -42,9 +42,9 @@ phen_dict = {
     '2443':'diabetes',
     '21001':'bmi',
 }
-gc_bucket = 'gs://nbaya/risk_gradients/gwas/'
+gwas_wd = 'gs://nbaya/risk_gradients/gwas/'
 
-def get_mt(phen, variant_set):
+def get_mt(phen, variant_set, seed=None, test_set=0.1):
     mt0 = hl.read_matrix_table(f'gs://nbaya/split/ukb31063.{variant_set}_variants.gwas_samples_repart.mt')
     
     print(f'\nReading UKB phenotype {phen_dict[phen]} (code: {phen})...')
@@ -68,11 +68,47 @@ def get_mt(phen, variant_set):
     withdrawn_set = set(withdrawn.f0.take(withdrawn.count()))
     mt1 = mt1.filter_cols(hl.literal(withdrawn_set).contains(mt1['s']),keep=False) 
     mt1 = mt1.key_cols_by('s')
-    
+        
     n = mt1.count_cols()
     n_cas = mt1.filter_cols(mt1.phen == 1).count_cols()
     
-    return mt1, n, n_cas
+    #Create training and testing matrix tables
+    train_mt_path = f'{gwas_wd}train.{phen}.mt'
+    test_mt_path = f'{gwas_wd}test.{phen}.mt'
+    train_mt_done = (subprocess.call(['gsutil','ls',train_mt_path]) == 0)
+    test_mt_done = (subprocess.call(['gsutil','ls',test_mt_path]) == 0)
+    if not (train_mt_done and test_mt_done):
+        seed = seed if seed is not None else int(str(Env.next_seed())[:8])
+        n_train = int(round(n*(1-test_set)))
+        n_test = n-n_train
+        print('*****************')
+        print(f'Setting {test_set} of total population to be in the testing set')
+        print(f'n_train = {n_train}\tn_test = {n_test}')
+        print(f'seed = {seed}')
+        print('*****************')
+        randstate = np.random.RandomState(int(seed)) #seed random state for replicability
+        labels = ['train']*n_train+['test']*n_test
+        randstate.shuffle(labels)
+        mt2 = mt1.add_col_index('tmp_index').key_cols_by('tmp_index')
+        mt3 = mt2.annotate_cols(label = hl.literal(labels)[hl.int32(mt2.tmp_index)])
+        if not train_mt_done:
+            mt3.filter_cols(mt3.label == 'train').write(train_mt_path)
+        if not test_mt_done:
+            mt3.filter_cols(mt3.label == 'test').write(test_mt_path)
+    train_mt = hl.read_matrix_table(train_mt_path)
+    test_mt = hl.read_matrix_table(test_mt_path)
+    
+    n_cas_train = train_mt.filter_cols(train_mt.phen == 1).count_cols()
+    n_cas_test = test_mt.filter_cols(test_mt.phen == 1).count_cols()
+    
+    print('*****************')
+    print(f'Original prevalence: {round(n_cas/n,6)}')
+    print(f'Prevalence in training dataset: {round(n_cas_train/n_train,6)}')
+    print(f'Prevalence in testing dataset: {round(n_cas_test/n_test,6)}')
+    print(f'If trait is not case/control, these will probably both be 0.')
+    print('*****************')
+    
+    return train_mt, n_train, n_cas_train, test_mt, n_test, n_cas_test
     
 def downsample(mt, frac, phen, for_cases=None, seed = None):
     start = dt.datetime.now()
@@ -134,7 +170,7 @@ if __name__ == "__main__":
     print(header)
     
     for phen in phen_ls:
-        mt, n, n_cas = get_mt(phen, variant_set)
+        mt, n, n_cas, _, _, _ = get_mt(phen, variant_set, seed=seed, )
         print('\n*************')
         print(f'Starting phenotype: {phen_dict[phen]} (code: {phen})') 
         print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
@@ -145,6 +181,9 @@ if __name__ == "__main__":
             mt1, _, _ = downsample(mt=mt,frac=frac_all,phen=mt.phen,for_cases=None,seed=seed)
             for frac_cas in frac_cas_ls:
                 mt2, _, _ = downsample(mt=mt1,frac=frac_cas,phen=mt1.phen,for_cases=1,seed=seed)
+                if len(frac_cas)>1 or frac_cas != [1]:
+                    print('\ncheckpointing matrix table')
+                    mt2 = mt2.checkpoint(f'{gwas_wd}tmp.mt')
                 for frac_con in frac_con_ls:
                     start_iter = dt.datetime.now()
                     mt3, n_new, n_cas_new = downsample(mt=mt2,frac=frac_con,phen=mt2.phen,for_cases=0,seed=seed)
@@ -153,9 +192,9 @@ if __name__ == "__main__":
                     mt3 = mt3.annotate_entries(GT = gt0[(mt3.locus,mt3.alleles),mt3.s].GT)
                     mt3 = mt3.annotate_rows(maf = hl.agg.stats(mt3.dosage).mean/2) # annotate with maf
                     if frac_con == 1 and frac_cas ==1:
-                        id_path = f'{gc_bucket}iid.{phen}.n_{n_new}of{n}.seed_{seed}.tsv.bgz' 
+                        id_path = f'{gwas_wd}iid.{phen}.n_{n_new}of{n}.seed_{seed}.tsv.bgz' 
                     else:
-                        id_path = f'{gc_bucket}iid.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}.tsv.bgz' 
+                        id_path = f'{gwas_wd}iid.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}.tsv.bgz' 
                     cols = mt3.cols().key_by().select('s')
                     cols = cols.annotate(iid=cols.s).annotate(s=1).rename({'s':'fid'}).export(id_path)
                     
@@ -182,9 +221,9 @@ if __name__ == "__main__":
                                      eff = ht[ss.SNP]['beta'])
 
                     if frac_con == 1 and frac_cas ==1:
-                        path = f'{gc_bucket}ss.{phen}.n_{n_new}of{n}.seed_{seed}.tsv.bgz' 
+                        path = f'{gwas_wd}ss.{phen}.n_{n_new}of{n}.seed_{seed}.tsv.bgz' 
                     else:
-                        path = f'{gc_bucket}ss.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}.tsv.bgz' 
+                        path = f'{gwas_wd}ss.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}.tsv.bgz' 
                     ss.export(path)
                     elapsed_iter = dt.datetime.now()-start_iter
                     print('\n*************')
