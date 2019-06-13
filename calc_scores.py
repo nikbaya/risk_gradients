@@ -15,7 +15,7 @@ import numpy as np
 import subprocess
 import pandas as pd
 import datetime as dt
-from hail.utils.java import Env
+import os
 
 
 parser = argparse.ArgumentParser(add_help=False)
@@ -44,6 +44,7 @@ frac_con_ls = [1] if frac_con_ls == None else frac_con_ls
 
 
 wd = 'gs://nbaya/risk_gradients/'
+local_wd = '/home/nbaya/' #working directory for VM instance
 gwas_wd = wd+'gwas/'
 phen_dict = {
     '50':'height',
@@ -87,54 +88,6 @@ def get_mt(phen, variant_set):
 
     return mt2, n, n_cas
 
-def downsample(mt, frac, phen, for_cases=None, seed = None):
-    start = dt.datetime.now()
-    assert frac <= 1 and frac >= 0, "frac must be in [0,1]"
-    phen_name = phen._ir.name
-    n = mt.count_cols()
-    n_cas = mt.filter_cols(mt[phen_name]==1).count_cols()
-    if frac == 1:
-        return mt, n, n_cas
-    else:
-        seed = seed if seed is not None else int(str(Env.next_seed())[:8])
-        header = '\n************\n'
-        header += 'Downsampling '+('all' if for_cases is None else ('cases'*for_cases+'controls'*(for_cases==0)))+f' by frac = {frac}\n'
-        header += f'n: {n}\n'
-        header += f'n_cas: {n_cas}\nn_con: {n-n_cas}\nprevalence: {round(n_cas/n,6)}\n' if for_cases != None else ''
-        header += f'seed: {seed}\n'
-        header += '************'
-        print(header)
-        col_key = mt.col_key
-        randstate = np.random.RandomState(int(seed)) #seed random state for replicability
-        for_cases = bool(for_cases) if for_cases != None else None
-        filter_arg = (mt[phen_name] == (for_cases==0)) if for_cases != None else (hl.is_defined(mt[phen_name])==False)
-        mtA = mt.filter_cols(filter_arg) #keep all individuals in this mt
-        mtB = mt.filter_cols(filter_arg , keep=False) #downsample individuals in this mt
-        mtB = mtB.add_col_index('col_idx_tmpB')
-        mtB = mtB.key_cols_by('col_idx_tmpB')
-        nB = n_cas*for_cases + (n-n_cas)*(for_cases==0) if for_cases is not None else n
-        n_keep = int(nB*frac)
-        labels = ['A']*(n_keep)+['B']*(nB-n_keep)
-        randstate.shuffle(labels)
-        mtB = mtB.annotate_cols(label = hl.literal(labels)[hl.int32(mtB.col_idx_tmpB)])
-        mtB = mtB.filter_cols(mtB.label == 'A')
-        mtB = mtB.key_cols_by(*col_key)
-        mtB = mtB.drop('col_idx_tmpB','label')
-        mt1 = mtA.union_cols(mtB) 
-        n_new = mt1.count_cols()
-        n_cas_new = mt1.filter_cols(mt1[phen_name]==1).count_cols()
-        elapsed = dt.datetime.now()-start
-        print('\n************')
-        print('Finished downsampling '+('all' if for_cases is None else ('cases'*for_cases+'controls'*(for_cases==0)))+f' by frac = {frac}')
-        print(f'n: {n} -> {n_new} ({round(100*n_new/n,3)}% of original)')
-        if n_cas != 0 and n_new != 0 :
-            print(f'n_cas: {n_cas} -> {n_cas_new} ({round(100*n_cas_new/n_cas,3)}% of original)')
-            print(f'n_con: {n-n_cas} -> {n_new-n_cas_new} ({round(100*(n_new-n_cas_new)/(n-n_cas),3)}% of original)')
-            print(f'prevalence: {round(n_cas/n,6)} -> {round(n_cas_new/n_new,6)} ({round(100*(n_cas_new/n_new)/(n_cas/n),6)}% of original)')
-        print(f'Time for downsampling: '+str(round(elapsed.seconds/60, 2))+' minutes')
-        print('************')
-        return mt1, n_new, n_cas
-
 if __name__=="__main__":
     
     for i, phen in enumerate(phen_ls):
@@ -164,16 +117,18 @@ if __name__=="__main__":
                     mt3.cols().select('phen','pgs').export(f'{wd}pgs{suffix}.tsv.bgz')
                     elapsed_pgs = dt.datetime.now()-start_pgs
                     print('\nFinished calculating PGS')
-                    print(f'Time for calculating PGS: {round(elapsed_pgs.seconds/60, 2)}minutes')
+                    print(f'Time for calculating PGS: {round(elapsed_pgs.seconds/60, 2)} minutes')
     
                     print('calculating R^2 between PGS and phenotype...')
                     print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
                     start_r2 = dt.datetime.now()
-                    subprocess.call(['gsutil','cp',f'{wd}pgs{suffix}.tsv.bgz','/home/nbaya/'])
-                    subprocess.call(['gsutil','cp',f'{gwas_wd}iid{suffix}.tsv.bgz','/home/nbaya/'])
-                    df = pd.read_csv(f'/home/nbaya/pgs{suffix}.tsv.bgz',delimiter='\t',compression='gzip')
+                    if not os.path.isdir(local_wd):
+                        os.mkdir(local_wd)
+                    subprocess.call(['gsutil','cp',f'{wd}pgs{suffix}.tsv.bgz',local_wd])
+                    subprocess.call(['gsutil','cp',f'{gwas_wd}iid{suffix}.tsv.bgz',local_wd])
+                    df = pd.read_csv(f'{local_wd}pgs{suffix}.tsv.bgz',delimiter='\t',compression='gzip')
                     r_all, pval_all = stats.pearsonr(df.pgs, df.phen)
-                    iid = pd.read_csv(f'/home/nbaya/iid{suffix}.tsv.bgz',delimiter='\t',compression='gzip')
+                    iid = pd.read_csv(f'{local_wd}iid{suffix}.tsv.bgz',delimiter='\t',compression='gzip')
                     df1 = df[df.s.isin(iid.iid.tolist())]
                     r_sub, pval_sub = stats.pearsonr(df1.pgs,df1.phen)
                     print('\n****************************')
@@ -183,8 +138,8 @@ if __name__=="__main__":
                     print(f'r = {r_sub}, pval = {pval_sub}')
                     print('****************************')
                     array = [[r_all, pval_all],[r_sub, pval_sub]]
-                    np.savetxt(f'/home/nbaya/corr{suffix}.txt',array,delimiter='\t')
-                    subprocess.call(['gsutil','cp',f'/home/nbaya/corr{suffix}.txt',wd])
+                    np.savetxt(f'{local_wd}corr{suffix}.txt',array,delimiter='\t')
+                    subprocess.call(['gsutil','cp',f'{local_wd}corr{suffix}.txt',wd])
                     elapsed_r2 = dt.datetime.now()-start_r2
                     print('\nFinished calculating R^2')
-                    print(f'Time for calculating R^2: {round(elapsed_r2.seconds/60, 2)}minutes')
+                    print(f'Time for calculating R^2: {round(elapsed_r2.seconds/60, 2)} minutes')
