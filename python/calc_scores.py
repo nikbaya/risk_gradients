@@ -162,7 +162,7 @@ if __name__=="__main__":
                                                 'n_train':[n],'n_cas_train':[n_cas],
                                                 'n_test':[n_test],'n_cas_test':[n_cas_test],
                                                 'r':[r],'pval':[pval]})
-                    result.to_csv(path=f'{local_wd}corr{suffix}.tsv',sep='\t',index=False)
+                    result.to_csv(path_or_buf=f'{local_wd}corr{suffix}.tsv',sep='\t',index=False)
                     subprocess.call(['gsutil','cp',f'{local_wd}corr{suffix}.tsv',wd])
                     elapsed_r2 = dt.datetime.now()-start_r2
                     print('\nFinished calculating R^2')

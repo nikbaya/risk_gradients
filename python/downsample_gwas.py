@@ -41,7 +41,8 @@ phen_dict = {
 }
 gwas_wd = 'gs://nbaya/risk_gradients/gwas/'
 
-def get_mt(phen, variant_set, seed=None, test_set=0.1):
+def get_mt(phen, variant_set, seed=None, test_frac=0.1):
+    start = dt.datetime.now()
     mt0 = hl.read_matrix_table(f'gs://nbaya/split/ukb31063.{variant_set}_variants.gwas_samples_repart.mt')
 
     print(f'\nReading UKB phenotype {phen_dict[phen]} (code: {phen})...')
@@ -67,13 +68,14 @@ def get_mt(phen, variant_set, seed=None, test_set=0.1):
 
     n = mt1.count_cols()
     n_cas = mt1.filter_cols(mt1.phen == 1).count_cols()
-
+    
     #Create training and testing matrix tables
     seed = seed if seed is not None else int(str(Env.next_seed())[:8])
-    n_train = int(round(n*(1-test_set)))
+    n_train = int(round(n*(1-test_frac)))
     n_test = n-n_train
-    print('*****************')
-    print(f'Setting {test_set} of total population to be in the testing set')
+    
+    print('\n*****************')
+    print(f'Setting {test_frac} of total population to be in the testing set')
     print(f'n_train = {n_train}\tn_test = {n_test}')
     print(f'seed = {seed}')
     print('*****************')
@@ -82,23 +84,20 @@ def get_mt(phen, variant_set, seed=None, test_set=0.1):
     randstate.shuffle(labels)
     mt2 = mt1.add_col_index('tmp_index').key_cols_by('tmp_index')
     mt3 = mt2.annotate_cols(set = hl.literal(labels)[hl.int32(mt2.tmp_index)])
-    # if not train_mt_done:
-    # mt3.filter_cols(mt3.label == 'train').write(train_mt_path,overwrite=True)
-    # if not test_mt_done:
-    # mt3.filter_cols(mt3.label == 'test').write(test_mt_path, overwrite=True)
-    # train_mt = hl.read_matrix_table(train_mt_path)
-    # test_mt = hl.read_matrix_table(test_mt_path)
     train_mt = mt3.filter_cols(mt3.set == 'train')
     test_mt = mt3.filter_cols(mt3.set == 'test')
 
     n_cas_train = train_mt.filter_cols(train_mt.phen == 1).count_cols()
     n_cas_test = test_mt.filter_cols(test_mt.phen == 1).count_cols()
 
-    print('*****************')
+    elapsed = dt.datetime.now() - start
+    print('\n*****************')
+    print(f'n_cas: {n_cas}\nn_cas_train: {n_cas_train}\tn_cas_test: {n_cas_test}')
     print(f'Original prevalence of {phen_dict[phen]} (code: {phen}): {round(n_cas/n,6)}')
     print(f'Prevalence in training dataset: {round(n_cas_train/n_train,6)}')
     print(f'Prevalence in testing dataset: {round(n_cas_test/n_test,6)}')
-    print(f'If trait is not case/control, these will probably all be 0.')
+    print(f'(Note: If trait is not case/control, these will probably all be 0)')
+    print(f'Time to get training and testing sets: {round(elapsed.seconds/60, 2)} minutes')
     print('*****************')
 
     return train_mt, n_train, n_cas_train, test_mt, n_test, n_cas_test
@@ -175,9 +174,6 @@ if __name__ == "__main__":
             mt1, _, _ = downsample(mt=mt,frac=frac_all,phen=mt.phen,for_cases=None,seed=seed)
             for frac_cas in frac_cas_ls:
                 mt2, _, _ = downsample(mt=mt1,frac=frac_cas,phen=mt1.phen,for_cases=1,seed=seed)
-                # if len(frac_cas_ls)>1 or frac_cas_ls != [1]:
-                #     print('\ncheckpointing matrix table')
-                #     mt2 = mt2.checkpoint(f'{gwas_wd}tmp.mt')
                 for frac_con in frac_con_ls:
                     start_iter = dt.datetime.now()
                     mt3, n_new, n_cas_new = downsample(mt=mt2,frac=frac_con,phen=mt2.phen,for_cases=0,seed=seed)

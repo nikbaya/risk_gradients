@@ -19,10 +19,11 @@ import os
 cloud_wd = 'gs://nbaya/risk_gradients/'
 gwas_wd = cloud_wd+'gwas/'
 phen_dict = {
-    '50':['height', 360338, 0],
-    '2443':['diabetes', 360142, 17272],
-    '21001':['BMI',359933, 0],
+    '50':['height', 360338, 0, 324304, 0],
+    '2443':['diabetes', 360142, 17272, 324128, 15494],
+    '21001':['BMI',359933, 0, 323940, 0]
 }
+
 
 local_wd = '/Users/nbaya/Documents/lab/risk_gradients/'
 
@@ -46,9 +47,11 @@ frac_con_ls = [1]
 
 n = phen_dict[phen][1]
 n_cas = phen_dict[phen][2]
+n_train = phen_dict[phen][3]
+n_cas_train = phen_dict[phen][4]
 seed = 1
 
-df_path = f'{local_wd}{phen_dict[phen][0]}_pgs.tsv'
+df_path = f'{local_wd}data/pgs_results.{phen}.desc_{phen_dict[phen][0]}.tsv'
 
 if os.path.isfile(df_path):
     df = pd.read_csv(df_path,delimiter='\t')
@@ -57,41 +60,48 @@ else:
                                'n_test','n_cas_test','r','pval'])
     i = 0
     for frac_all in frac_all_ls:
-        n_new0 = int(n*frac_all)
+        n_new0 = int(n_train*frac_all)
         for frac_cas in frac_cas_ls:
-            n_cas_new = int(n_cas*frac_cas)
+            n_cas_new = int(n_cas_train*frac_cas)
             for frac_con in frac_con_ls:
                 n_new = int(frac_con*(n_new0-n_cas_new)+n_cas_new)
                 if frac_con == 1 and frac_cas ==1:
-                    suffix = f'.{phen}.n_{n_new}of{n}.seed_{seed}'
+                    suffix = f'.{phen}.n_{n_new}of{n_train}.seed_{seed}'
                 else:
-                    suffix = f'.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}'
-                if not os.path.isfile(f'{local_wd}corr{suffix}.tsv'):
-                    subprocess.call(f'gsutil cp {cloud_wd}corr{suffix}.tsv'.split(' '))
-                result = pd.read_csv(f'{local_wd}corr{suffix}.tsv',sep='\t')
-                df.loc[i] = [result['phen'],result['desc'],n,n_cas,result['n_train'],
-                             result['n_cas_train'], result['n_test'],result['n_cas_test'].
-                             result['r'], result['pval']]
+                    suffix = f'.{phen}.n_{n_new}of{n_train}.n_cas_{n_cas_new}of{n_cas_train}.seed_{seed}'
+                if not os.path.isfile(f'{local_wd}data/corr{suffix}.tsv'):
+                    subprocess.call(f'gsutil cp {cloud_wd}corr{suffix}.tsv {local_wd}data/'.split(' '))
+                if not os.path.isfile(f'{local_wd}data/corr{suffix}.tsv'):
+                    print(f'{cloud_wd}corr{suffix}.tsv does not exist, using null values instead')
+                    row = [float('nan')]*10
+                else:
+                    result = pd.read_csv(f'{local_wd}data/corr{suffix}.tsv',sep='\t')
+                    row = [result['phen'].values[0],result['desc'].values[0],n,n_cas,n_new,n_cas_new,
+                                 result['n_test'].values[0],result['n_cas_test'].values[0],result['r'].values[0], 
+                                 result['pval'].values[0]]
+                df.loc[i] = row
                 i += 1
-    df['inv_n_new'] = 1/df.n_new
-    df['inv_R2'] = 1/df.r_all**2
+    df['inv_n_train'] = 1/df.n_train
+    df['inv_R2'] = 1/df.r**2
 
 df = df.dropna()
 
-plt.plot(df.n_new/df.n, df.r_all**2,'.-')
-plt.xlabel('fraction of total population used in training set')
+plt.plot(df.n_train/phen_dict[phen][3], df.r**2,'.-')
+plt.xlabel('fraction of training set used for GWAS')
 plt.ylabel('R^2')
 plt.xlim([0,1])
-plt.ylim([0,round(max(df.r_all**2)*1.1,2)])
+plt.ylim([0,round(max(df.r**2)*1.1,(2 if max(df.r**2)>0.1 else 3))])
 plt.title(f'Prediction accuracy of PGS for {phen_dict[phen][0]} (code: {phen})')
-plt.text(x=0.8,y=max(df.r_all**2)*0.05,s=f'N = {phen_dict[phen][1]}')
+plt.text(x=(0.65 if n_cas>0 else 0.7),
+         y=max(df.r**2)*(0.06 if n_cas>0 else 0.05),
+         s=f'N_train = {phen_dict[phen][3]}'+(f'\nN_cas_train = {phen_dict[phen][4]}' if n_cas>0 else ''))
 fig=plt.gcf()
 fig.savefig(f'{local_wd}plots/{phen}_pgs_prediction.png',dpi=600)
 plt.close()
-
+    
 if n_cas > 0:
     x = (1/df.n_cas_new + 1/(df.n_new-df.n_cas_new))
-    y = 1/df.r_all**2
+    y = 1/df.r**2
     plt.plot(x, y,'.-')
     plt.xlabel('1/N_e')
     plt.ylabel('1/R^2')
@@ -106,7 +116,7 @@ if n_cas > 0:
     fig=plt.gcf()
     fig.savefig(f'{local_wd}plots/{phen}_inv_Neff_inv_R2.png',dpi=600)
     plt.close()
-
+        
 plt.plot(df.inv_n_new, df.inv_R2,'.-')
 result = sm.OLS(df.inv_R2.tolist(),sm.add_constant(df.inv_n_new.tolist())).fit()
 R2 = result.rsquared
@@ -122,4 +132,7 @@ plt.legend(['1/N vs. 1/R^2','OLS fit'],loc='lower right')
 fig=plt.gcf()
 fig.savefig(f'{local_wd}plots/{phen}_pgs_prediction_linearized.png',dpi=600)
 
-df.to_csv(f'{local_wd}{phen_dict[phen][0]}_pgs.tsv',sep='\t',index=False)
+
+
+
+df.to_csv(df_path,sep='\t',index=False)
