@@ -234,3 +234,7 @@ if __name__ == "__main__":
         print(f'Time for phenotype: '+str(round(elapsed_phen.seconds/60, 2))+' minutes')
         print('*************')
 
+<<<<<<< HEAD
+=======
+        
+>>>>>>> caac90740ed9a5690b985bfe9c2b836cd439e0f2
