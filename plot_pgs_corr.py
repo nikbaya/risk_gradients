@@ -21,7 +21,7 @@ gwas_wd = cloud_wd+'gwas/'
 phen_dict = {
     '50':['height', 360338, 0],
     '2443':['diabetes', 360142, 17272],
-    '21001':['bmi',359933, 0],
+    '21001':['BMI',359933, 0],
 }
 
 local_wd = '/Users/nbaya/Documents/lab/risk_gradients/'
@@ -93,39 +93,21 @@ fig.savefig(f'{local_wd}plots/{phen}_pgs_prediction.png',dpi=600)
 plt.close()
 
 if n_cas > 0:
-    K = (df.n_cas/df.n) #prevalence of trait in population
-    P = (df.n_cas_new/df.n_new) #prevalence of trait in training set
-    plt.plot(P/K, df.r_all**2,'.-')
-    plt.xlabel('P/K')
-    plt.ylabel('R^2')
-#    plt.xlim([0,1])
-    result = sm.OLS(endog=(df.r_all**2).tolist(),exog=sm.add_constant((P/K).tolist())).fit()
+    x = (1/df.n_cas_new + 1/(df.n_new-df.n_cas_new))
+    y = 1/df.r_all**2
+    plt.plot(x, y,'.-')
+    plt.xlabel('1/N_e')
+    plt.ylabel('1/R^2')
+    result = sm.OLS(endog=y.tolist(),exog=sm.add_constant(x.tolist())).fit()
     R2 = result.rsquared
     b, a = result.params[0], result.params[1]
-    x = np.asarray([min(P/K),max(P/K)])
     plt.plot(x,a*x+b,'k--',alpha=0.5)
-    plt.title(f'Prediction accuracy of PGS for {phen_dict[phen][0]} (code: {phen})')
-    plt.text(x=min(P/K)+0.*(max(P/K)-min(P/K)),y=min(df.r_all**2),
-             s=f'y = {round(a,6)}*x + {round(b,6)}\nR^2 = {round(R2,6)}\nK = {round(n_cas/n,6)}')
+    plt.title(f'PGS for {phen_dict[phen][0]} (code: {phen})')
+    plt.text(x=min(x), y=max(y)-0.1*(max(y)-min(y)),
+             s=f'y = {round(a,6)}*x + {round(b,6)}\nR^2 = {round(R2,6)}')
+    plt.legend(['1/N_e vs. 1/R^2','OLS fit'],loc='lower right')
     fig=plt.gcf()
-    plt.legend(['P/K vs. R^2','OLS fit'])
-    fig.savefig(f'{local_wd}plots/{phen}_pgs_P_div_K.png',dpi=600)
-    plt.close()
-    
-    plt.plot(P, df.r_all**2,'.-')
-    plt.xlabel('P (prevalence of trait in training set)')
-    plt.ylabel('R^2')
-    result = sm.OLS(endog=(df.r_all**2).tolist(),exog=sm.add_constant(P.tolist())).fit()
-    R2 = result.rsquared
-    b, a = result.params[0], result.params[1]
-    x = np.asarray([min(P),max(P)])
-    plt.plot(x,a*x+b,'k--',alpha=0.5)
-    plt.title(f'Prediction accuracy of PGS for {phen_dict[phen][0]} (code: {phen})')
-    plt.text(x=min(P),y=min(df.r_all**2),
-             s=f'y = {round(a,6)}*x + {round(b,6)}\nR^2 = {round(R2,6)}\nK = {round(n_cas/n,6)}')
-    fig=plt.gcf()
-    plt.legend(['P vs. R^2','OLS fit'])
-    fig.savefig(f'{local_wd}plots/{phen}_pgs_P.png',dpi=600)
+    fig.savefig(f'{local_wd}plots/{phen}_inv_Neff_inv_R2.png',dpi=600)
     plt.close()
 
 plt.plot(df.inv_n_new, df.inv_R2,'.-')
@@ -138,7 +120,7 @@ plt.title(f'PGS for {phen_dict[phen][0]} (code: {phen})')
 plt.ylabel('1/R^2')
 plt.xlabel('1/N')
 plt.text(x=min(df.inv_n_new), y=max(df.inv_R2)-0.2*(max(df.inv_R2)-min(df.inv_R2)),
-         s=f'y = {round(a,6)}*x + {round(b,6)}\nR^2 = {round(R2,6)}\nh2_M = {round(1/b,6)}\nM_e = {int(a/b**2)}')
+         s=f'y = {round(a,6)}*x + {round(b,6)}\nR^2 = {round(R2,6)}\nh2_M = {round(1/b,6)}\nM_e = {int(round(a/b**2))}')
 plt.legend(['1/N vs. 1/R^2','OLS fit'],loc='lower right')
 fig=plt.gcf()
 fig.savefig(f'{local_wd}plots/{phen}_pgs_prediction_linearized.png',dpi=600)

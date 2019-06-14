@@ -1,0 +1,89 @@
+2019-06-14 08:57:36 Hail: WARN: This Hail JAR was compiled for Spark 2.4.0, running with Spark 2.4.3.
+  Compatibility is not guaranteed.
+2019-06-14 08:57:36 SparkContext: INFO: Running Spark version 2.4.3
+2019-06-14 08:57:36 SparkContext: INFO: Submitted application: Hail
+2019-06-14 08:57:36 SparkContext: INFO: Spark configuration:
+spark.app.name=Hail
+spark.driver.extraClassPath=/anaconda3/lib/python3.6/site-packages/hail/hail-all-spark.jar
+spark.executor.extraClassPath=/anaconda3/lib/python3.6/site-packages/hail/hail-all-spark.jar
+spark.hadoop.io.compression.codecs=org.apache.hadoop.io.compress.DefaultCodec,is.hail.io.compress.BGzipCodec,is.hail.io.compress.BGzipCodecTbi,org.apache.hadoop.io.compress.GzipCodec
+spark.hadoop.mapreduce.input.fileinputformat.split.minsize=0
+spark.kryo.registrator=is.hail.kryo.HailKryoRegistrator
+spark.logConf=true
+spark.master=local[*]
+spark.serializer=org.apache.spark.serializer.KryoSerializer
+spark.submit.deployMode=client
+spark.ui.showConsoleProgress=false
+2019-06-14 08:57:36 SecurityManager: INFO: Changing view acls to: nbaya
+2019-06-14 08:57:36 SecurityManager: INFO: Changing modify acls to: nbaya
+2019-06-14 08:57:36 SecurityManager: INFO: Changing view acls groups to: 
+2019-06-14 08:57:36 SecurityManager: INFO: Changing modify acls groups to: 
+2019-06-14 08:57:36 SecurityManager: INFO: SecurityManager: authentication disabled; ui acls disabled; users  with view permissions: Set(nbaya); groups with view permissions: Set(); users  with modify permissions: Set(nbaya); groups with modify permissions: Set()
+2019-06-14 08:57:37 Utils: INFO: Successfully started service 'sparkDriver' on port 50024.
+2019-06-14 08:57:37 SparkEnv: INFO: Registering MapOutputTracker
+2019-06-14 08:57:37 SparkEnv: INFO: Registering BlockManagerMaster
+2019-06-14 08:57:37 BlockManagerMasterEndpoint: INFO: Using org.apache.spark.storage.DefaultTopologyMapper for getting topology information
+2019-06-14 08:57:37 BlockManagerMasterEndpoint: INFO: BlockManagerMasterEndpoint up
+2019-06-14 08:57:37 DiskBlockManager: INFO: Created local directory at /private/var/folders/56/q7rh2y5x7hj4n359_13dgwxcmtwz20/T/blockmgr-a76e1230-4c31-4aba-bcbe-e6ce7e2b710d
+2019-06-14 08:57:37 MemoryStore: INFO: MemoryStore started with capacity 366.3 MB
+2019-06-14 08:57:37 SparkEnv: INFO: Registering OutputCommitCoordinator
+2019-06-14 08:57:37 log: INFO: Logging initialized @3543ms
+2019-06-14 08:57:37 Server: INFO: jetty-9.3.z-SNAPSHOT, build timestamp: unknown, git hash: unknown
+2019-06-14 08:57:37 Server: INFO: Started @3652ms
+2019-06-14 08:57:37 AbstractConnector: INFO: Started ServerConnector@57871379{HTTP/1.1,[http/1.1]}{0.0.0.0:4040}
+2019-06-14 08:57:37 Utils: INFO: Successfully started service 'SparkUI' on port 4040.
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@137b2c94{/jobs,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@9db561c{/jobs/json,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@6e799885{/jobs/job,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@7568920c{/jobs/job/json,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@2650410b{/stages,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@4cf48f4{/stages/json,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@1fa26fa1{/stages/stage,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@7461533a{/stages/stage/json,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@78b2f570{/stages/pool,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@d998af3{/stages/pool/json,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@3e2e9db6{/storage,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@4028f1ca{/storage/json,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@2f5e95ca{/storage/rdd,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@6ed14cc0{/storage/rdd/json,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@24d8af81{/environment,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@2379bc71{/environment/json,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@78529d11{/executors,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@1c016997{/executors/json,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@7dc47931{/executors/threadDump,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@1330c8cc{/executors/threadDump/json,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@7f6675ae{/static,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@635ac17b{/,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@5aab383c{/api,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@2fbfd809{/jobs/job/kill,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@6b7d7072{/stages/stage/kill,null,AVAILABLE,@Spark}
+2019-06-14 08:57:37 SparkUI: INFO: Bound SparkUI to 0.0.0.0, and started at http://wm65b-8a9.broadinstitute.org:4040
+2019-06-14 08:57:37 Executor: INFO: Starting executor ID driver on host localhost
+2019-06-14 08:57:37 Utils: INFO: Successfully started service 'org.apache.spark.network.netty.NettyBlockTransferService' on port 50025.
+2019-06-14 08:57:37 NettyBlockTransferService: INFO: Server created on wm65b-8a9.broadinstitute.org:50025
+2019-06-14 08:57:37 BlockManager: INFO: Using org.apache.spark.storage.RandomBlockReplicationPolicy for block replication policy
+2019-06-14 08:57:37 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-14 08:57:37 BlockManagerMasterEndpoint: INFO: Registering block manager wm65b-8a9.broadinstitute.org:50025 with 366.3 MB RAM, BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-14 08:57:37 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-14 08:57:37 BlockManager: INFO: Initialized BlockManager: BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-14 08:57:38 ContextHandler: INFO: Started o.s.j.s.ServletContextHandler@189f19c0{/metrics/json,null,AVAILABLE,@Spark}
+2019-06-14 08:57:38 Hail: INFO: Hail temporary directory: file:/tmp/hail.TKfZvDw4iwe6
+2019-06-14 08:57:38 MemoryStore: INFO: Block broadcast_0 stored as values in memory (estimated size 237.3 KB, free 366.1 MB)
+2019-06-14 08:57:39 MemoryStore: INFO: Block broadcast_0_piece0 stored as bytes in memory (estimated size 23.0 KB, free 366.0 MB)
+2019-06-14 08:57:39 BlockManagerInfo: INFO: Added broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (size: 23.0 KB, free: 366.3 MB)
+2019-06-14 08:57:39 SparkContext: INFO: Created broadcast 0 from broadcast at HailContext.scala:395
+2019-06-14 08:57:39 Hail: INFO: SparkUI: http://wm65b-8a9.broadinstitute.org:4040
+2019-06-14 08:57:39 Hail: INFO: Running Hail version 0.2.14-8dcb6722c72a
+2019-06-14 08:57:39 MemoryStore: INFO: Block broadcast_1 stored as values in memory (estimated size 33.5 KB, free 366.0 MB)
+2019-06-14 08:57:39 MemoryStore: INFO: Block broadcast_1_piece0 stored as bytes in memory (estimated size 2.9 KB, free 366.0 MB)
+2019-06-14 08:57:39 BlockManagerInfo: INFO: Added broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (size: 2.9 KB, free: 366.3 MB)
+2019-06-14 08:57:39 SparkContext: INFO: Created broadcast 1 from broadcast at ReferenceGenome.scala:454
+2019-06-14 08:57:39 MemoryStore: INFO: Block broadcast_2 stored as values in memory (estimated size 1643.2 KB, free 364.4 MB)
+2019-06-14 08:57:39 MemoryStore: INFO: Block broadcast_2_piece0 stored as bytes in memory (estimated size 108.4 KB, free 364.3 MB)
+2019-06-14 08:57:39 BlockManagerInfo: INFO: Added broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (size: 108.4 KB, free: 366.2 MB)
+2019-06-14 08:57:39 SparkContext: INFO: Created broadcast 2 from broadcast at ReferenceGenome.scala:454
+2019-06-14 08:57:39 MemoryStore: INFO: Block broadcast_3 stored as values in memory (estimated size 8.7 KB, free 364.3 MB)
+2019-06-14 08:57:39 MemoryStore: INFO: Block broadcast_3_piece0 stored as bytes in memory (estimated size 1000.0 B, free 364.3 MB)
+2019-06-14 08:57:39 BlockManagerInfo: INFO: Added broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (size: 1000.0 B, free: 366.2 MB)
+2019-06-14 08:57:39 SparkContext: INFO: Created broadcast 3 from broadcast at ReferenceGenome.scala:454
+2019-06-14 08:57:40 Hail: INFO: balding_nichols_model: generating genotypes for 1 populations, 100 samples, and 100 variants...

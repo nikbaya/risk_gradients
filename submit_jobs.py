@@ -11,11 +11,16 @@ For submitting hard-parallelized jobs across clusters
 import subprocess
 import os
 
-frac_ls = [0.2, 0.4, 0.6, 0.8, 1]
-parsplit = len(frac_ls) # number of parallel batches to run
+phen = '50'
+frac_all_ls = [0.2, 0.4, 0.6, 0.8, 1]
+frac_cas_ls = [1]
+parsplit = len(frac_all_ls) # number of parallel batches to run
 
-os.chdir('/Users/nbaya/Documents/risk_gradients/')
-for i, frac in enumerate(frac_ls):
-    start = ['cluster','start',f'ukbb-nb-{i}','--max-idle','10m','--num-workers','10']
-    submit = ['cluster','submit',f'ukbb-nb-{i}','--args','"--"','--num-workers','10']
-    subprocess.call()
+os.chdir('/Users/nbaya/Documents/lab/risk_gradients/')
+
+for i, frac in enumerate(frac_all_ls):
+    start = f'cluster start ukbb-nb-{i} --max-idle 10m --num-workers 10'
+    submit = f'cluster submit ukbb-nb-{i} calc_scores.py --args "--phen {phen} --frac_all_ls {frac}"'
+    subprocess.call(start+' ; '+submit)
+    
+    subprocess.call(['cluster','list'])
