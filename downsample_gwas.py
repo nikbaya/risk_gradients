@@ -233,5 +233,3 @@ if __name__ == "__main__":
         print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
         print(f'Time for phenotype: '+str(round(elapsed_phen.seconds/60, 2))+' minutes')
         print('*************')
-
-        
