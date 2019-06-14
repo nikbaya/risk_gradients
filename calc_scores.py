@@ -55,6 +55,7 @@ phen_dict = {
 }
 
 def get_mt(phen, variant_set, seed=None, test_set=0.1):
+    start = dt.datetime.now()
     mt0 = hl.read_matrix_table(f'gs://nbaya/split/ukb31063.{variant_set}_variants.gwas_samples_repart.mt')
 
     print(f'\nReading UKB phenotype {phen_dict[phen]} (code: {phen})...')
@@ -100,11 +101,13 @@ def get_mt(phen, variant_set, seed=None, test_set=0.1):
     n_cas_train = train_mt.filter_cols(train_mt.phen == 1).count_cols()
     n_cas_test = test_mt.filter_cols(test_mt.phen == 1).count_cols()
 
+    elapsed = dt.datetime.now() - start
     print('*****************')
     print(f'Original prevalence of {phen_dict[phen]} (code: {phen}): {round(n_cas/n,6)}')
     print(f'Prevalence in training dataset: {round(n_cas_train/n_train,6)}')
     print(f'Prevalence in testing dataset: {round(n_cas_test/n_test,6)}')
     print(f'If trait is not case/control, these will probably all be 0.')
+    print(f'Time to get training and testing sets: {round(elapsed.seconds/60, 2)} minutes')
     print('*****************')
 
     return train_mt, n_train, n_cas_train, test_mt, n_test, n_cas_test
@@ -114,7 +117,7 @@ def get_mt(phen, variant_set, seed=None, test_set=0.1):
 if __name__=="__main__":
     
     for i, phen in enumerate(phen_ls):
-        _, n, n_cas, mt1, _, _= get_mt(phen, 'hm3', seed=seed) #get n and n_cas from training set, and get testing set matrix table
+        _, n, n_cas, test_mt, n_test, n_cas_test= get_mt(phen, 'hm3', seed=seed) 
         for frac_all in frac_all_ls:
             n_new0 = int(frac_all*n)
             for frac_cas in frac_cas_ls:
@@ -131,14 +134,14 @@ if __name__=="__main__":
                     gwas = gwas.key_by('SNP')
                     
                     print('annotating with betas...')
-                    mt2 = mt1.annotate_rows(beta = gwas[mt1.rsid].eff)
+                    test_mt1 = test_mt.annotate_rows(beta = gwas[test_mt.rsid].eff)
                     
                     print('calculating PGS...')
                     print(f'frac_all: {frac_all}\tfrac_cas: {frac_cas}\tfrac_con: {frac_con}')
                     print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
                     start_pgs = dt.datetime.now()
-                    mt3 = mt2.annotate_cols(pgs = hl.agg.sum(mt2.dosage*mt2.beta))
-                    mt3.cols().select('phen','pgs').export(f'{wd}pgs{suffix}.tsv.bgz')
+                    test_mt2 = test_mt1.annotate_cols(pgs = hl.agg.sum(test_mt1.dosage*test_mt1.beta))
+                    test_mt2.cols().key_by('s').select('phen','pgs').export(f'{wd}pgs{suffix}.tsv.bgz')
                     elapsed_pgs = dt.datetime.now()-start_pgs
                     print('\nFinished calculating PGS')
                     print(f'Time for calculating PGS: {round(elapsed_pgs.seconds/60, 2)} minutes')
@@ -149,21 +152,18 @@ if __name__=="__main__":
                     if not os.path.isdir(local_wd):
                         os.mkdir(local_wd)
                     subprocess.call(['gsutil','cp',f'{wd}pgs{suffix}.tsv.bgz',local_wd])
-                    subprocess.call(['gsutil','cp',f'{gwas_wd}iid{suffix}.tsv.bgz',local_wd])
                     df = pd.read_csv(f'{local_wd}pgs{suffix}.tsv.bgz',delimiter='\t',compression='gzip')
-                    r_all, pval_all = stats.pearsonr(df.pgs, df.phen)
-                    iid = pd.read_csv(f'{local_wd}iid{suffix}.tsv.bgz',delimiter='\t',compression='gzip')
-                    df1 = df[df.s.isin(iid.iid.tolist())]
-                    r_sub, pval_sub = stats.pearsonr(df1.pgs,df1.phen)
+                    r, pval = stats.pearsonr(df.pgs, df.phen)
                     print('\n****************************')
-                    print(f'PGS-phenotype correlation for all {n} individuals')
-                    print(f'r = {r_all}, pval = {pval_all}')
-                    print(f'PGS-phenotype correlation for all {n_new} individuals')
-                    print(f'r = {r_sub}, pval = {pval_sub}')
+                    print(f'PGS-phenotype correlation for all {n_test} individuals in test set')
+                    print(f'r = {r}, pval = {pval}')
                     print('****************************')
-                    array = [[r_all, pval_all],[r_sub, pval_sub]]
-                    np.savetxt(f'{local_wd}corr{suffix}.txt',array,delimiter='\t')
-                    subprocess.call(['gsutil','cp',f'{local_wd}corr{suffix}.txt',wd])
+                    result = pd.DataFrame(data={'phen': [phen],'desc':phen_dict[phen],
+                                                'n_train':[n],'n_cas_train':[n_cas],
+                                                'n_test':[n_test],'n_cas_test':[n_cas_test],
+                                                'r':[r],'pval':[pval]})
+                    result.to_csv(path=f'{local_wd}corr{suffix}.tsv',sep='\t',index=False)
+                    subprocess.call(['gsutil','cp',f'{local_wd}corr{suffix}.tsv',wd])
                     elapsed_r2 = dt.datetime.now()-start_r2
                     print('\nFinished calculating R^2')
                     print(f'Time for calculating R^2: {round(elapsed_r2.seconds/60, 2)} minutes')
