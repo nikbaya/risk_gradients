@@ -232,4 +232,8 @@ if __name__ == "__main__":
         print(f'Number of downsampling fraction combinations: {len(frac_all_ls)*len(frac_con_ls)*len(frac_cas_ls)}')
         print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
         print(f'Time for phenotype: '+str(round(elapsed_phen.seconds/60, 2))+' minutes')
+<<<<<<< HEAD
         print('*************')
+=======
+        print('*************')
+>>>>>>> 02e226848f164f615ead6a07ec36c1ea1814c4fe
