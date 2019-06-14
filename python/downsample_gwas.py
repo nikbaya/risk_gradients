@@ -74,11 +74,11 @@ def get_mt(phen, variant_set, seed=None, test_frac=0.1):
     n_train = int(round(n*(1-test_frac)))
     n_test = n-n_train
     
-    print('\n*****************')
+    print('\n###############')
     print(f'Setting {test_frac} of total population to be in the testing set')
     print(f'n_train = {n_train}\tn_test = {n_test}')
     print(f'seed = {seed}')
-    print('*****************')
+    print('###############')
     randstate = np.random.RandomState(int(seed)) #seed random state for replicability
     labels = ['train']*n_train+['test']*n_test
     randstate.shuffle(labels)
@@ -91,14 +91,14 @@ def get_mt(phen, variant_set, seed=None, test_frac=0.1):
     n_cas_test = test_mt.filter_cols(test_mt.phen == 1).count_cols()
 
     elapsed = dt.datetime.now() - start
-    print('\n*****************')
+    print('\n###############')
     print(f'n_cas: {n_cas}\nn_cas_train: {n_cas_train}\tn_cas_test: {n_cas_test}')
     print(f'Original prevalence of {phen_dict[phen]} (code: {phen}): {round(n_cas/n,6)}')
     print(f'Prevalence in training dataset: {round(n_cas_train/n_train,6)}')
     print(f'Prevalence in testing dataset: {round(n_cas_test/n_test,6)}')
-    print(f'(Note: If trait is not case/control, these will probably all be 0)')
+    print(f'(Note: If trait is not binary, these will probably all be 0)')
     print(f'Time to get training and testing sets: {round(elapsed.seconds/60, 2)} minutes')
-    print('*****************')
+    print('###############')
 
     return train_mt, n_train, n_cas_train, test_mt, n_test, n_cas_test
 
@@ -112,12 +112,12 @@ def downsample(mt, frac, phen, for_cases=None, seed = None):
         return mt, n, n_cas
     else:
         seed = seed if seed is not None else int(str(Env.next_seed())[:8])
-        header = '\n************\n'
+        header = '\n############\n'
         header += 'Downsampling '+('all' if for_cases is None else ('cases'*for_cases+'controls'*(for_cases==0)))+f' by frac = {frac}\n'
         header += f'n: {n}\n'
         header += f'n_cas: {n_cas}\nn_con: {n-n_cas}\nprevalence: {round(n_cas/n,6)}\n' if for_cases != None else ''
         header += f'seed: {seed}\n'
-        header += '************'
+        header += '############'
         print(header)
         col_key = mt.col_key
         randstate = np.random.RandomState(int(seed)) #seed random state for replicability
@@ -139,7 +139,7 @@ def downsample(mt, frac, phen, for_cases=None, seed = None):
         n_new = mt1.count_cols()
         n_cas_new = mt1.filter_cols(mt1[phen_name]==1).count_cols()
         elapsed = dt.datetime.now()-start
-        print('\n************')
+        print('\n############')
         print('Finished downsampling '+('all' if for_cases is None else ('cases'*for_cases+'controls'*(for_cases==0)))+f' by frac = {frac}')
         print(f'n: {n} -> {n_new} ({round(100*n_new/n,3)}% of original)')
         if n_cas != 0 and n_new != 0 :
@@ -147,25 +147,25 @@ def downsample(mt, frac, phen, for_cases=None, seed = None):
             print(f'n_con: {n-n_cas} -> {n_new-n_cas_new} ({round(100*(n_new-n_cas_new)/(n-n_cas),3)}% of original)')
             print(f'prevalence: {round(n_cas/n,6)} -> {round(n_cas_new/n_new,6)} ({round(100*(n_cas_new/n_new)/(n_cas/n),6)}% of original)')
         print(f'Time for downsampling: '+str(round(elapsed.seconds/60, 2))+' minutes')
-        print('************')
+        print('############')
         return mt1, n_new, n_cas
 
 
 if __name__ == "__main__":
-    header =  '\n*************\n'
+    header =  '\n############\n'
     header += f'Phenotypes to downsample: {[phen_dict[phen]+f" (code: {phen})" for phen in phen_ls]}\n'
     header += f'Downsampling fractions for all: {frac_all_ls}\n' if frac_all_ls != None else ''
     header += f'Downsampling fractions for cases: {frac_cas_ls}\n' if frac_cas_ls != None else ''
     header += f'Downsampling fractions for controls: {frac_con_ls}\n' if frac_con_ls != None else ''
     header += f'Random seed: {seed}\n'
-    header += '*************'
+    header += '############'
     print(header)
 
     for phen in phen_ls:
-        print('\n*************')
+        print('\n############')
         print(f'Starting phenotype: {phen_dict[phen]} (code: {phen})')
         print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
-        print('*************')
+        print('############')
         mt, n, n_cas, _, _, _ = get_mt(phen, variant_set, seed=seed, )
 
         start_phen = dt.datetime.now()
@@ -174,13 +174,17 @@ if __name__ == "__main__":
             mt1, _, _ = downsample(mt=mt,frac=frac_all,phen=mt.phen,for_cases=None,seed=seed)
             for frac_cas in frac_cas_ls:
                 mt2, _, _ = downsample(mt=mt1,frac=frac_cas,phen=mt1.phen,for_cases=1,seed=seed)
-                for frac_con in frac_con_ls:
+#                if len(frac_cas_ls)>1 or frac_cas_ls != [1]:
+#                    print('\ncheckpointing matrix table...')
+#                    print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
+#                    mt2 = mt2.checkpoint(f'{gwas_wd}tmp_mt.{phen}.mt',overwrite=True)
+                for frac_con in frac_con_ls[1:]:
                     start_iter = dt.datetime.now()
                     mt3, n_new, n_cas_new = downsample(mt=mt2,frac=frac_con,phen=mt2.phen,for_cases=0,seed=seed)
 
                     gt0 = hl.read_matrix_table('gs://phenotype_31063/hail/imputed/ukb31063.GT.autosomes.mt/')
                     mt3 = mt3.annotate_entries(GT = gt0[(mt3.locus,mt3.alleles),mt3.s].GT)
-                    mt3 = mt3.annotate_rows(maf = hl.agg.stats(mt3.dosage).mean/2) # annotate with maf
+                    mt3 = mt3.annotate_rows(maf = hl.agg.stats(mt3.GT.n_alt_alleles()).mean/2) # annotate with maf
                     if frac_con == 1 and frac_cas ==1:
                         id_path = f'{gwas_wd}iid.{phen}.n_{n_new}of{n}.seed_{seed}.tsv.bgz'
                     else:
@@ -216,16 +220,16 @@ if __name__ == "__main__":
                         path = f'{gwas_wd}ss.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}.tsv.bgz'
                     ss.export(path)
                     elapsed_iter = dt.datetime.now()-start_iter
-                    print('\n*************')
+                    print('\n############')
                     print(f'Finished GWAS for downsampled phenotype: {phen_dict[phen]} (code: {phen})')
                     print(f'frac_all = {frac_all}, frac_cas = {frac_cas}, frac_con = {frac_con}')
                     print(f'Time for downsampled GWAS: '+str(round(elapsed_iter.seconds/60, 2))+' minutes')
-                    print('*************')
+                    print('############')
 
         elapsed_phen = dt.datetime.now()-start_phen
-        print('\n*************')
+        print('\n############')
         print(f'Finished phenotype: {phen_dict[phen]} (code: {phen})')
         print(f'Number of downsampling fraction combinations: {len(frac_all_ls)*len(frac_con_ls)*len(frac_cas_ls)}')
         print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
         print(f'Time for phenotype: '+str(round(elapsed_phen.seconds/60, 2))+' minutes')
-        print('*************')
+        print('############')

@@ -106,7 +106,7 @@ def get_mt(phen, variant_set, seed=None, test_set=0.1):
     print(f'Original prevalence of {phen_dict[phen]} (code: {phen}): {round(n_cas/n,6)}')
     print(f'Prevalence in training dataset: {round(n_cas_train/n_train,6)}')
     print(f'Prevalence in testing dataset: {round(n_cas_test/n_test,6)}')
-    print(f'If trait is not case/control, these will probably all be 0.')
+    print(f'(Note: If trait is not binary, these will probably all be 0)')
     print(f'Time to get training and testing sets: {round(elapsed.seconds/60, 2)} minutes')
     print('*****************')
 
@@ -135,7 +135,7 @@ if __name__=="__main__":
                     
                     print('annotating with betas...')
                     test_mt1 = test_mt.annotate_rows(beta = gwas[test_mt.rsid].eff)
-                    
+
                     print('calculating PGS...')
                     print(f'frac_all: {frac_all}\tfrac_cas: {frac_cas}\tfrac_con: {frac_con}')
                     print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
