@@ -103,6 +103,18 @@ def get_mt(phen, variant_set, seed=None, test_set=0.1):
     train_mt = mt3.filter_cols(mt3.set == 'train')
     test_mt = mt3.filter_cols(mt3.set == 'test')
     
+    # Pruning test_mt to variants in variants table
+    pruned_snps_file = 'ukb_imp_v3_pruned.bim'
+    variants = hl.import_table(wd+pruned_snps_file,delimiter='\t',no_header=True,impute=True)
+    print('\n###############')
+    print(f'Pruning testing set to {variants.count()} variants in variants table...')
+    print(f'Variants table used: {pruned_snps_file}')
+    print('###############')
+    variants = variants.rename({'f0':'chr','f1':'rsid','f3':'pos'}).key_by('rsid')
+    test_mt = test_mt.key_rows_by('rsid')
+    test_mt = test_mt.filter_rows(hl.is_defined(variants[test_mt.rsid])) #filter to variants defined in variants table
+    
+    
     n_cas_train = train_mt.filter_cols(train_mt.phen == 1).count_cols()
     n_cas_test = test_mt.filter_cols(test_mt.phen == 1).count_cols()
 
@@ -144,17 +156,6 @@ if __name__=="__main__":
                     else:
                         suffix = f'.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}'
                     
-                    # Prune to variants in variants table
-                    pruned_snps_file = 'ukb_imp_v3_pruned.bim'
-                    variants = hl.import_table(wd+pruned_snps_file,delimiter='\t',no_header=True,impute=True)
-                    print('\n###############')
-                    print(f'\nPruning testing set to {variants.count()} variants in variants table...')
-                    print(f'Variants table used: {pruned_snps_file}')
-                    print('###############')
-                    variants = variants.rename({'f0':'chr','f1':'rsid','f3':'pos'}).key_by('rsid')
-                    test_mt = test_mt.key_rows_by('rsid')
-                    test_mt = test_mt.filter_rows(hl.is_defined(variants[test_mt.rsid])) #filter to variants defined in variants table
-                    
                     print('Importing GWAS results table...')
                     gwas = hl.import_table(f'{gwas_wd}ss{suffix}.tsv.bgz',force_bgz=True,impute=True)
                     gwas = gwas.key_by('SNP')
@@ -168,15 +169,19 @@ if __name__=="__main__":
                         print('\n###############')
                         print(f'Filtering variants by p-value threshold = {t}...')
                         print('###############')
-
-                        test_mt2 = test_mt1.filter_rows(test_mt1.pval < t)
+                        if t != 1:
+                            test_mt1 = test_mt1.filter_rows(test_mt1.pval < t)
+                        n_rows = test_mt1.count_rows()
+                        print('\n###############')
+                        print(f'Number of variants remaining after thresholding: {n_rows}...')
+                        print('###############')
 
                         print('Calculating PGS...')
                         print(f'frac_all: {frac_all}\tfrac_cas: {frac_cas}\tfrac_con: {frac_con}')
                         print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
                         start_pgs = dt.datetime.now()
-                        test_mt3 = test_mt2.annotate_cols(pgs = hl.agg.sum(test_mt2.dosage*test_mt2.beta))
-                        test_mt3.cols().key_by('s').select('phen','pgs').export(f'{wd}pgs{suffix}.tsv.bgz')
+                        test_mt2 = test_mt1.annotate_cols(pgs = hl.agg.sum(test_mt1.dosage*test_mt1.beta))
+                        test_mt2.cols().key_by('s').select('phen','pgs').export(f'{wd}pgs{suffix}.threshold_{t}.tsv.bgz')
                         elapsed_pgs = dt.datetime.now()-start_pgs
                         print('\n###############')
                         print('\nFinished calculating PGS')
@@ -198,7 +203,8 @@ if __name__=="__main__":
                                                     'n_train':[n],'n_cas_train':[n_cas],
                                                     'n_test':[n_test],'n_cas_test':[n_cas_test],
                                                     'r':[r],'pval':[pval]})
-                        result.to_csv(path_or_buf=f'{local_wd}corr{suffix}.tsv',sep='\t',index=False)
-                        subprocess.call(['gsutil','cp',f'{local_wd}corr{suffix}.tsv',wd])
+                        corr_file = f'{local_wd}corr{suffix}.threshold_{t}.tsv'
+                        result.to_csv(path_or_buf=corr_file,sep='\t',index=False)
+                        subprocess.call(['gsutil','cp',corr_file,wd])
                         print('\nFinished calculating R^2')
 
