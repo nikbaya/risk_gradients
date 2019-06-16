@@ -27,6 +27,7 @@ parser.add_argument('--phen_ls', nargs='+', type=str, required=True, help="pheno
 parser.add_argument('--frac_all_ls', nargs='+', type=float, required=False, default=None, help="downsampling fraction of all individuals")
 parser.add_argument('--frac_cas_ls', nargs='+', type=float, required=False, default=None, help="downsampling fraction of cases")
 parser.add_argument('--frac_con_ls', nargs='+', type=float, required=False, default=None, help="downsampling fraction of controls")
+parser.add_argument('--thresholds', nargs='+', type=float, required=False, default=None, help="thresholds for thresholding")
 parser.add_argument('--seed', type=int, required=False, default=None, help="random seed for replicability")
 args = parser.parse_args()
 
@@ -37,12 +38,14 @@ phen_ls = args.phen_ls
 frac_all_ls = args.frac_all_ls
 frac_cas_ls = args.frac_cas_ls
 frac_con_ls = args.frac_con_ls
+thresholds = args.thresholds
 seed = args.seed
 seed = 1 if seed is None else seed
 
 frac_all_ls = [1] if frac_all_ls == None else frac_all_ls
 frac_cas_ls = [1] if frac_cas_ls == None else frac_cas_ls
 frac_con_ls = [1] if frac_con_ls == None else frac_con_ls
+thresholds = [1] if thresholds == None else thresholds
 
 
 wd = 'gs://nbaya/risk_gradients/'
@@ -104,7 +107,7 @@ def get_mt(phen, variant_set, seed=None, test_set=0.1):
     n_cas_test = test_mt.filter_cols(test_mt.phen == 1).count_cols()
 
     elapsed = dt.datetime.now() - start
-    print('###############')
+    print('\n###############')
     print(f'Original prevalence of {phen_dict[phen]} (code: {phen}): {round(n_cas/n,6)}')
     print(f'Prevalence in training dataset: {round(n_cas_train/n_train,6)}')
     print(f'Prevalence in testing dataset: {round(n_cas_test/n_test,6)}')
@@ -117,6 +120,15 @@ def get_mt(phen, variant_set, seed=None, test_set=0.1):
 
 
 if __name__=="__main__":
+    header =  '\n############\n'
+    header += f'Phenotypes: {[phen_dict[phen]+f" (code: {phen})" for phen in phen_ls]}\n'
+    header += f'Downsampling fractions for all: {frac_all_ls}\n' if frac_all_ls != None else ''
+    header += f'Downsampling fractions for cases: {frac_cas_ls}\n' if frac_cas_ls != None else ''
+    header += f'Downsampling fractions for controls: {frac_con_ls}\n' if frac_con_ls != None else ''
+    header += f'Thresholds: {thresholds}\n'
+    header += f'Random seed: {seed}\n'
+    header += '############'
+    print(header)
     
     for i, phen in enumerate(phen_ls):
         _, n, n_cas, test_mt, n_test, n_cas_test= get_mt(phen, 'hm3', seed=seed) 
@@ -133,8 +145,12 @@ if __name__=="__main__":
                         suffix = f'.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}'
                     
                     # Prune to variants in variants table
-                    variants = hl.import_table(wd+'ukb_imp_v3_pruned.bim',delimiter='\t',no_header=True,impute=True)
+                    pruned_snps_file = 'ukb_imp_v3_pruned.bim'
+                    variants = hl.import_table(wd+pruned_snps_file,delimiter='\t',no_header=True,impute=True)
+                    print('\n###############')
                     print(f'\nPruning testing set to {variants.count()} variants in variants table...')
+                    print(f'Variants table used: {pruned_snps_file}')
+                    print('###############')
                     variants = variants.rename({'f0':'chr','f1':'rsid','f3':'pos'}).key_by('rsid')
                     test_mt = test_mt.key_rows_by('rsid')
                     test_mt = test_mt.filter_rows(hl.is_defined(variants[test_mt.rsid])) #filter to variants defined in variants table
@@ -143,37 +159,46 @@ if __name__=="__main__":
                     gwas = hl.import_table(f'{gwas_wd}ss{suffix}.tsv.bgz',force_bgz=True,impute=True)
                     gwas = gwas.key_by('SNP')
                     
-                    print('Annotating test set matrix table with betas...')
-                    test_mt1 = test_mt.annotate_rows(beta = gwas[test_mt.rsid].eff)
+                    print('Annotating test set matrix table with betas, p-values...')
+                    test_mt1 = test_mt.annotate_rows(beta = gwas[test_mt.rsid].eff,
+                                                     pval = gwas[test_mt.rsid].pval)
+                    
+                    for t in thresholds:
+                        # Thresholding to variants with p-value less than threshold
+                        print('\n###############')
+                        print(f'Filtering variants by p-value threshold = {t}...')
+                        print('###############')
 
-                    print('Calculating PGS...')
-                    print(f'frac_all: {frac_all}\tfrac_cas: {frac_cas}\tfrac_con: {frac_con}')
-                    print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
-                    start_pgs = dt.datetime.now()
-                    test_mt2 = test_mt1.annotate_cols(pgs = hl.agg.sum(test_mt1.dosage*test_mt1.beta))
-                    test_mt2.cols().key_by('s').select('phen','pgs').export(f'{wd}pgs{suffix}.tsv.bgz')
-                    elapsed_pgs = dt.datetime.now()-start_pgs
-                    print('\nFinished calculating PGS')
-                    print(f'Time for calculating PGS: {round(elapsed_pgs.seconds/60, 2)} minutes')
-    
-                    print('Calculating R^2 between PGS and phenotype...')
-                    print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
-                    start_r2 = dt.datetime.now()
-                    if not os.path.isdir(local_wd):
-                        os.mkdir(local_wd)
-                    subprocess.call(['gsutil','cp',f'{wd}pgs{suffix}.tsv.bgz',local_wd])
-                    df = pd.read_csv(f'{local_wd}pgs{suffix}.tsv.bgz',delimiter='\t',compression='gzip')
-                    r, pval = stats.pearsonr(df.pgs, df.phen)
-                    print('\n###########################')
-                    print(f'PGS-phenotype correlation for all {n_test} individuals in test set')
-                    print(f'r = {r}, pval = {pval}')
-                    print('###########################')
-                    result = pd.DataFrame(data={'phen': [phen],'desc':phen_dict[phen],
-                                                'n_train':[n],'n_cas_train':[n_cas],
-                                                'n_test':[n_test],'n_cas_test':[n_cas_test],
-                                                'r':[r],'pval':[pval]})
-                    result.to_csv(path_or_buf=f'{local_wd}corr{suffix}.tsv',sep='\t',index=False)
-                    subprocess.call(['gsutil','cp',f'{local_wd}corr{suffix}.tsv',wd])
-                    elapsed_r2 = dt.datetime.now()-start_r2
-                    print('\nFinished calculating R^2')
-                    print(f'Time for calculating R^2: {round(elapsed_r2.seconds/60, 2)} minutes')
+                        test_mt2 = test_mt1.filter_rows(test_mt1.pval < t)
+
+                        print('Calculating PGS...')
+                        print(f'frac_all: {frac_all}\tfrac_cas: {frac_cas}\tfrac_con: {frac_con}')
+                        print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
+                        start_pgs = dt.datetime.now()
+                        test_mt3 = test_mt2.annotate_cols(pgs = hl.agg.sum(test_mt2.dosage*test_mt2.beta))
+                        test_mt3.cols().key_by('s').select('phen','pgs').export(f'{wd}pgs{suffix}.tsv.bgz')
+                        elapsed_pgs = dt.datetime.now()-start_pgs
+                        print('\n###############')
+                        print('\nFinished calculating PGS')
+                        print(f'Time for calculating PGS: {round(elapsed_pgs.seconds/60, 2)} minutes')
+                        print('###############')
+        
+                        print('Calculating R^2 between PGS and phenotype...')
+                        print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
+                        if not os.path.isdir(local_wd):
+                            os.mkdir(local_wd)
+                        subprocess.call(['gsutil','cp',f'{wd}pgs{suffix}.tsv.bgz',local_wd])
+                        df = pd.read_csv(f'{local_wd}pgs{suffix}.tsv.bgz',delimiter='\t',compression='gzip')
+                        r, pval = stats.pearsonr(df.pgs, df.phen)
+                        print('\n###########################')
+                        print(f'PGS-phenotype correlation for all {n_test} individuals in test set')
+                        print(f'r = {r}, pval = {pval}')
+                        print('###########################')
+                        result = pd.DataFrame(data={'phen': [phen],'desc':phen_dict[phen],
+                                                    'n_train':[n],'n_cas_train':[n_cas],
+                                                    'n_test':[n_test],'n_cas_test':[n_cas_test],
+                                                    'r':[r],'pval':[pval]})
+                        result.to_csv(path_or_buf=f'{local_wd}corr{suffix}.tsv',sep='\t',index=False)
+                        subprocess.call(['gsutil','cp',f'{local_wd}corr{suffix}.tsv',wd])
+                        print('\nFinished calculating R^2')
+
