@@ -81,14 +81,16 @@ def get_mt(phen, variant_set, seed=None, test_set=0.1):
     n = mt1.count_cols()
     n_cas = mt1.filter_cols(mt1.phen == 1).count_cols()
 
+    
+
     seed = seed if seed is not None else int(str(Env.next_seed())[:8])
     n_train = int(round(n*(1-test_set)))
     n_test = n-n_train
-    print('\n*****************')
+    print('\n###############')
     print(f'Setting {test_set} of total population to be in the testing set')
     print(f'n_train = {n_train}\tn_test = {n_test}')
     print(f'seed = {seed}')
-    print('*****************')
+    print('###############')
     randstate = np.random.RandomState(int(seed)) #seed random state for replicability
     labels = ['train']*n_train+['test']*n_test
     randstate.shuffle(labels)
@@ -102,13 +104,13 @@ def get_mt(phen, variant_set, seed=None, test_set=0.1):
     n_cas_test = test_mt.filter_cols(test_mt.phen == 1).count_cols()
 
     elapsed = dt.datetime.now() - start
-    print('*****************')
+    print('###############')
     print(f'Original prevalence of {phen_dict[phen]} (code: {phen}): {round(n_cas/n,6)}')
     print(f'Prevalence in training dataset: {round(n_cas_train/n_train,6)}')
     print(f'Prevalence in testing dataset: {round(n_cas_test/n_test,6)}')
     print(f'(Note: If trait is not binary, these will probably all be 0)')
     print(f'Time to get training and testing sets: {round(elapsed.seconds/60, 2)} minutes')
-    print('*****************')
+    print('###############')
 
     return train_mt, n_train, n_cas_train, test_mt, n_test, n_cas_test
 
@@ -122,21 +124,29 @@ if __name__=="__main__":
             n_new0 = int(frac_all*n)
             for frac_cas in frac_cas_ls:
                 n_cas_new = int(frac_cas*n_cas)
+                n_new1 = (n_new0 - n_cas) + n_cas_new
                 for frac_con in frac_con_ls:
-                    n_new = int(frac_con*(n_new0-n_cas_new)+n_cas_new)
+                    n_new = int(frac_con*(n_new1-n_cas_new)+n_cas_new)
                     if frac_con == 1 and frac_cas ==1:
                         suffix = f'.{phen}.n_{n_new}of{n}.seed_{seed}'
                     else:
                         suffix = f'.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}'
                     
-                    print('importing table...')
+                    # Prune to variants in variants table
+                    variants = hl.import_table(wd+'ukb_imp_v3_pruned.bim',delimiter='\t',no_header=True,impute=True)
+                    print(f'\nPruning testing set to {variants.count()} variants in variants table...')
+                    variants = variants.rename({'f0':'chr','f1':'rsid','f3':'pos'}).key_by('rsid')
+                    test_mt = test_mt.key_rows_by('rsid')
+                    test_mt = test_mt.filter_rows(hl.is_defined(variants[test_mt.rsid])) #filter to variants defined in variants table
+                    
+                    print('Importing GWAS results table...')
                     gwas = hl.import_table(f'{gwas_wd}ss{suffix}.tsv.bgz',force_bgz=True,impute=True)
                     gwas = gwas.key_by('SNP')
                     
-                    print('annotating with betas...')
+                    print('Annotating test set matrix table with betas...')
                     test_mt1 = test_mt.annotate_rows(beta = gwas[test_mt.rsid].eff)
 
-                    print('calculating PGS...')
+                    print('Calculating PGS...')
                     print(f'frac_all: {frac_all}\tfrac_cas: {frac_cas}\tfrac_con: {frac_con}')
                     print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
                     start_pgs = dt.datetime.now()
@@ -146,7 +156,7 @@ if __name__=="__main__":
                     print('\nFinished calculating PGS')
                     print(f'Time for calculating PGS: {round(elapsed_pgs.seconds/60, 2)} minutes')
     
-                    print('calculating R^2 between PGS and phenotype...')
+                    print('Calculating R^2 between PGS and phenotype...')
                     print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
                     start_r2 = dt.datetime.now()
                     if not os.path.isdir(local_wd):
@@ -154,10 +164,10 @@ if __name__=="__main__":
                     subprocess.call(['gsutil','cp',f'{wd}pgs{suffix}.tsv.bgz',local_wd])
                     df = pd.read_csv(f'{local_wd}pgs{suffix}.tsv.bgz',delimiter='\t',compression='gzip')
                     r, pval = stats.pearsonr(df.pgs, df.phen)
-                    print('\n****************************')
+                    print('\n###########################')
                     print(f'PGS-phenotype correlation for all {n_test} individuals in test set')
                     print(f'r = {r}, pval = {pval}')
-                    print('****************************')
+                    print('###########################')
                     result = pd.DataFrame(data={'phen': [phen],'desc':phen_dict[phen],
                                                 'n_train':[n],'n_cas_train':[n_cas],
                                                 'n_test':[n_test],'n_cas_test':[n_cas_test],
