@@ -10017,3 +10017,147 @@ spark.ui.showConsoleProgress=false
 2019-06-16 15:57:28 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
 2019-06-16 15:57:28 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
 2019-06-16 15:57:28 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 15:57:38 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 15:57:38 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 15:57:38 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:57:38 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:57:38 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 15:57:38 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 15:57:38 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 15:57:38 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 15:57:38 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 15:57:48 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 15:57:48 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 15:57:48 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:57:48 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:57:48 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 15:57:48 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 15:57:48 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 15:57:48 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 15:57:48 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 15:57:58 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 15:57:58 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 15:57:58 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:57:58 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:57:58 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 15:57:58 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 15:57:58 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 15:57:58 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 15:57:58 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 15:58:08 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 15:58:08 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 15:58:08 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:58:08 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:58:08 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 15:58:08 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 15:58:08 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 15:58:08 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 15:58:08 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 15:58:18 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 15:58:18 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 15:58:18 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:58:18 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:58:18 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 15:58:18 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 15:58:18 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 15:58:18 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 15:58:18 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 15:58:28 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 15:58:28 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 15:58:28 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:58:28 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:58:28 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 15:58:28 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 15:58:28 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 15:58:28 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 15:58:28 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 15:58:38 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 15:58:38 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 15:58:38 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:58:38 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:58:38 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 15:58:38 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 15:58:38 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 15:58:38 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 15:58:38 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 15:58:48 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 15:58:48 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 15:58:48 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:58:48 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:58:48 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 15:58:48 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 15:58:48 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 15:58:48 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 15:58:48 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 15:58:58 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 15:58:58 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 15:58:58 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:58:58 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:58:58 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 15:58:58 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 15:58:58 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 15:58:58 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 15:58:58 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 15:59:08 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 15:59:08 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 15:59:08 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:59:08 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:59:08 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 15:59:08 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 15:59:08 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 15:59:08 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 15:59:08 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 15:59:18 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 15:59:18 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 15:59:18 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:59:18 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:59:18 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 15:59:18 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 15:59:18 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 15:59:18 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 15:59:18 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 15:59:28 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 15:59:28 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 15:59:28 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:59:28 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:59:28 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 15:59:28 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 15:59:28 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 15:59:28 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 15:59:28 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 15:59:38 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 15:59:38 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 15:59:38 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:59:38 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:59:38 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 15:59:38 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 15:59:38 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 15:59:38 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 15:59:38 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 15:59:48 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 15:59:48 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 15:59:48 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:59:48 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:59:48 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 15:59:48 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 15:59:48 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 15:59:48 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 15:59:48 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 15:59:58 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 15:59:58 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 15:59:58 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:59:58 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 15:59:58 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 15:59:58 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 15:59:58 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 15:59:58 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 15:59:58 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
+2019-06-16 16:00:08 Executor: INFO: Told to re-register on heartbeat
+2019-06-16 16:00:08 BlockManager: INFO: BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None) re-registering with master
+2019-06-16 16:00:08 BlockManagerMaster: INFO: Registering BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 16:00:08 BlockManagerMaster: INFO: Registered BlockManager BlockManagerId(driver, wm65b-8a9.broadinstitute.org, 50025, None)
+2019-06-16 16:00:08 BlockManager: INFO: Reporting 8 blocks to the master.
+2019-06-16 16:00:08 BlockManagerInfo: INFO: Updated broadcast_1_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 2.9 KB, original size: 2.9 KB, free: 366.2 MB)
+2019-06-16 16:00:08 BlockManagerInfo: INFO: Updated broadcast_3_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 1000.0 B, original size: 1000.0 B, free: 366.2 MB)
+2019-06-16 16:00:08 BlockManagerInfo: INFO: Updated broadcast_0_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 23.0 KB, original size: 23.0 KB, free: 366.2 MB)
+2019-06-16 16:00:08 BlockManagerInfo: INFO: Updated broadcast_2_piece0 in memory on wm65b-8a9.broadinstitute.org:50025 (current size: 108.4 KB, original size: 108.4 KB, free: 366.2 MB)
