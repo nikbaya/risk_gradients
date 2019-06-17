@@ -48,92 +48,129 @@ frac_con_ls = [1] if frac_con_ls == None else frac_con_ls
 thresholds = [1] if thresholds == None else thresholds
 
 
-wd = 'gs://nbaya/risk_gradients/'
+wd = 'gs://nbaya/risk_gradients/' #working directory in cloud
 local_wd = '/home/nbaya/' #working directory for VM instance
 gwas_wd = wd+'gwas/'
 phen_dict = {
-    '50':'height',
-    '2443':'diabetes',
-    '21001':'bmi',
+    '50':['height', 360338, 0, 324304, 0],
+    '2443':['diabetes', 360142, 17272, 324128, 15494],
+    '21001':['BMI',359933, 0, 323940, 0]
 }
 
-def get_mt(phen, variant_set, seed=None, test_set=0.1):
-    start = dt.datetime.now()
-    mt0 = hl.read_matrix_table(f'gs://nbaya/split/ukb31063.{variant_set}_variants.gwas_samples_repart.mt')
-
-    print(f'\nReading UKB phenotype {phen_dict[phen]} (code: {phen})...')
-    phen_tb0 = hl.import_table('gs://phenotype_31063/ukb31063.phesant_phenotypes.both_sexes.tsv.bgz',
-                               missing='',impute=True,types={'"userId"': hl.tstr}).rename({ '"userId"': 's', '"'+phen+'"': 'phen'})
-    phen_tb0 = phen_tb0.key_by('s')
-    phen_tb = phen_tb0.select(phen_tb0['phen'])
-
-    mt1 = mt0.annotate_cols(phen_str = hl.str(phen_tb[mt0.s]['phen']).replace('\"',''))
-    mt1 = mt1.filter_cols(mt1.phen_str == '',keep=False)
-
-    if phen_tb.phen.dtype == hl.dtype('bool'):
-        mt1 = mt1.annotate_cols(phen = hl.bool(mt1.phen_str)).drop('phen_str')
-    else:
-        mt1 = mt1.annotate_cols(phen = hl.float64(mt1.phen_str)).drop('phen_str')
-
-    #Remove withdrawn samples
-    withdrawn = hl.import_table('gs://nbaya/w31063_20181016.csv',missing='',no_header=True)
-    withdrawn_set = set(withdrawn.f0.take(withdrawn.count()))
-    mt1 = mt1.filter_cols(hl.literal(withdrawn_set).contains(mt1['s']),keep=False)
-    mt1 = mt1.key_cols_by('s')
-
-    n = mt1.count_cols()
-    n_cas = mt1.filter_cols(mt1.phen == 1).count_cols()
-
-    
-
-    seed = seed if seed is not None else int(str(Env.next_seed())[:8])
-    n_train = int(round(n*(1-test_set)))
-    n_test = n-n_train
+def get_mt(phen, test_set=0.1, get='both', overwrite=False, seed=None):
     print('\n###############')
-    print(f'Setting {test_set} of total population to be in the testing set')
-    print(f'n_train = {n_train}\tn_test = {n_test}')
-    print(f'seed = {seed}')
+    print(f'phen: {phen_dict[phen][0]} (code: {phen})')
+    print(f'get: {"training and testing sets" if get=="both" else get+"ing set"}')
+    print(f'overwrite: {overwrite}')
+    print(f'seed: {seed}')
     print('###############')
-    randstate = np.random.RandomState(int(seed)) #seed random state for replicability
-    labels = ['train']*n_train+['test']*n_test
-    randstate.shuffle(labels)
-    mt2 = mt1.add_col_index('tmp_index').key_cols_by('tmp_index')
-    mt3 = mt2.annotate_cols(set = hl.literal(labels)[hl.int32(mt2.tmp_index)])
-    mt3 = mt3.key_cols_by('s').drop('tmp_index')
-    train_mt = mt3.filter_cols(mt3.set == 'train')
-    test_mt = mt3.filter_cols(mt3.set == 'test')
+    if not os.path.isdir(local_wd):
+        os.mkdir(local_wd)
+    train_mt_path = f'{wd}train.{phen}.seed_{seed}.mt'
+    test_mt_path = f'{wd}test.{phen}.seed_{seed}.mt'
+    train_success = f'{local_wd}train.{phen}.success'
+    test_success = f'{local_wd}test.{phen}.success'
+    subprocess.call(['gsutil','cp',train_mt_path+'/_SUCCESS',train_success])
+    subprocess.call(['gsutil','cp',test_mt_path+'/_SUCCESS',test_success])
+    if ((not os.path.isfile(train_success) and (get=='both' or get=='train')) 
+            or (not os.path.isfile(test_success) and get=='both' or get=='test')):
+        start = dt.datetime.now()
+        mt0 = hl.read_matrix_table(f'gs://nbaya/split/ukb31063.hm3_variants.gwas_samples_repart.mt') #use hm3 snps
     
-    # Pruning test_mt to variants in variants table
-    pruned_snps_file = 'ukb_imp_v3_pruned.bim'
-    variants = hl.import_table(wd+pruned_snps_file,delimiter='\t',no_header=True,impute=True)
-    print('\n###############')
-    print(f'Pruning testing set to {variants.count()} variants in variants table...')
-    print(f'Variants table used: {pruned_snps_file}')
-    print('###############')
-    variants = variants.rename({'f0':'chr','f1':'rsid','f3':'pos'}).key_by('rsid')
-    test_mt = test_mt.key_rows_by('rsid')
-    test_mt = test_mt.filter_rows(hl.is_defined(variants[test_mt.rsid])) #filter to variants defined in variants table
+        print(f'\nReading UKB phenotype {phen_dict[phen][0]} (code: {phen})...')
+        phen_tb0 = hl.import_table('gs://phenotype_31063/ukb31063.phesant_phenotypes.both_sexes.tsv.bgz',
+                                   missing='',impute=True,types={'"userId"': hl.tstr}).rename({ '"userId"': 's', '"'+phen+'"': 'phen'})
+        phen_tb0 = phen_tb0.key_by('s')
+        phen_tb = phen_tb0.select(phen_tb0['phen'])
     
+        mt1 = mt0.annotate_cols(phen_str = hl.str(phen_tb[mt0.s]['phen']).replace('\"',''))
+        mt1 = mt1.filter_cols(mt1.phen_str == '',keep=False)
     
-    n_cas_train = train_mt.filter_cols(train_mt.phen == 1).count_cols()
-    n_cas_test = test_mt.filter_cols(test_mt.phen == 1).count_cols()
+        if phen_tb.phen.dtype == hl.dtype('bool'):
+            mt1 = mt1.annotate_cols(phen = hl.bool(mt1.phen_str)).drop('phen_str')
+        else:
+            mt1 = mt1.annotate_cols(phen = hl.float64(mt1.phen_str)).drop('phen_str')
+    
+        #Remove withdrawn samples
+        withdrawn = hl.import_table('gs://nbaya/w31063_20181016.csv',missing='',no_header=True)
+        withdrawn_set = set(withdrawn.f0.take(withdrawn.count()))
+        mt1 = mt1.filter_cols(hl.literal(withdrawn_set).contains(mt1['s']),keep=False)
+        mt1 = mt1.key_cols_by('s')
+    
+        n = mt1.count_cols()
+        n_cas = mt1.filter_cols(mt1.phen == 1).count_cols()
+    
+        seed = seed if seed is not None else int(str(Env.next_seed())[:8])
+        n_train = int(round(n*(1-test_set)))
+        n_test = n-n_train
+        print('\n###############')
+        print(f'Setting {test_set} of total population to be in the testing set')
+        print(f'n_train = {n_train}\tn_test = {n_test}')
+        print(f'seed = {seed}')
+        print('###############')
+        randstate = np.random.RandomState(int(seed)) #seed random state for replicability
+        labels = ['train']*n_train+['test']*n_test
+        randstate.shuffle(labels)
+        mt2 = mt1.add_col_index('tmp_index').key_cols_by('tmp_index')
+        mt3 = mt2.annotate_cols(set = hl.literal(labels)[hl.int32(mt2.tmp_index)])
+        mt3 = mt3.key_cols_by('s').drop('tmp_index')
+        
+        if (not os.path.isfile(train_success) or overwrite==True) and (get=='train' or get=='both'):
+            train_mt = mt3.filter_cols(mt3.set == 'train')
+            n_cas_train = train_mt.filter_cols(train_mt.phen == 1).count_cols()
+            print('\nCheckpointing training set matrix table...')
+            train_mt.checkpoint(train_mt_path,overwrite=overwrite)
 
+        if (not os.path.isfile(test_success) or overwrite==True) and (get=='test' or get=='both'):
+            test_mt = mt3.filter_cols(mt3.set == 'test')
+        
+            # Pruning test_mt to variants in variants table
+            pruned_snps_file = 'ukb_imp_v3_pruned.bim'
+            variants = hl.import_table(wd+pruned_snps_file,delimiter='\t',no_header=True,impute=True)
+            print('\n###############')
+            print(f'Pruning testing set to {variants.count()} variants in variants table...')
+            print(f'Variants table used: {pruned_snps_file}')
+            print('###############')
+            variants = variants.rename({'f0':'chr','f1':'rsid','f3':'pos'}).key_by('rsid')
+            test_mt = test_mt.key_rows_by('rsid')
+            test_mt = test_mt.filter_rows(hl.is_defined(variants[test_mt.rsid])) #filter to variants defined in variants table
+            print('\nCheckpointing testing set matrix table...')
+            test_mt.checkpoint(test_mt_path,overwrite=overwrite)
+            n_cas_test = test_mt.filter_cols(test_mt.phen == 1).count_cols()
+
+    else: #matrix tables already written
+        if get=='train' or get=='both':
+            train_mt =  hl.read_matrix_table(train_mt_path)
+            n_train = train_mt.count_cols()
+            n_cas_train = train_mt.filter_cols(train_mt.phen == 1).count_cols()
+
+        if get=='test' or get=='both':
+            test_mt =  hl.read_matrix_table(test_mt_path)
+            n_test = test_mt.count_cols()
+            n_cas_test = test_mt.filter_cols(test_mt.phen == 1).count_cols()
+    
+    if get=='train':
+            test_mt, n_test, n_cas_test = None, None, None
+    elif get=='test':
+        train_mt, n_train, n_cas_train = None, None, None
+    
     elapsed = dt.datetime.now() - start
-    print('\n###############')
-    print(f'Original prevalence of {phen_dict[phen]} (code: {phen}): {round(n_cas/n,6)}')
-    print(f'Prevalence in training dataset: {round(n_cas_train/n_train,6)}')
-    print(f'Prevalence in testing dataset: {round(n_cas_test/n_test,6)}')
-    print(f'(Note: If trait is not binary, these will probably all be 0)')
-    print(f'Time to get training and testing sets: {round(elapsed.seconds/60, 2)} minutes')
-    print('###############')
-
-    return train_mt, n_train, n_cas_train, test_mt, n_test, n_cas_test
+    msg = '\n###############'
+    msg += f'\nOriginal prevalence of {phen_dict[phen][0]} (code: {phen}): {round(n_cas/n,6)}'
+    msg += f'\nPrevalence in training dataset: {round(n_cas_train/n_train,6)}' if (get=='both' or get=='train') else ''
+    msg += f'\nPrevalence in testing dataset: {round(n_cas_test/n_test,6)}' if (get=='both' or get=='test') else ''
+    msg += f'\n(Note: If trait is not binary, these will probably all be 0)'
+    msg += f'\nTime to get {"training and testing sets" if get=="both" else get+"ing set"}: {round(elapsed.seconds/60, 2)} minutes'
+    msg += '\n###############'
+    print(msg)
+    
+    return [train_mt, n_train, n_cas_train],[test_mt, n_test, n_cas_test]
 
 
 
 if __name__=="__main__":
     header =  '\n############\n'
-    header += f'Phenotypes: {[phen_dict[phen]+f" (code: {phen})" for phen in phen_ls]}\n'
+    header += f'Phenotypes: {[phen_dict[phen][0]+f" (code: {phen})" for phen in phen_ls]}\n'
     header += f'Downsampling fractions for all: {frac_all_ls}\n' if frac_all_ls != None else ''
     header += f'Downsampling fractions for cases: {frac_cas_ls}\n' if frac_cas_ls != None else ''
     header += f'Downsampling fractions for controls: {frac_con_ls}\n' if frac_con_ls != None else ''
@@ -143,18 +180,20 @@ if __name__=="__main__":
     print(header)
     
     for i, phen in enumerate(phen_ls):
-        _, n, n_cas, test_mt, n_test, n_cas_test= get_mt(phen, 'hm3', seed=seed) 
+        _, _, _, test_mt, n_test, n_cas_test= get_mt(phen, get='test',seed=seed) 
+        n_train = phen_dict[phen][3]
+        n_cas_train = phen_dict[phen][4]
         for frac_all in frac_all_ls:
-            n_new0 = int(frac_all*n)
+            n_new0 = int(frac_all*n_train)
             for frac_cas in frac_cas_ls:
-                n_cas_new = int(frac_cas*n_cas)
-                n_new1 = (n_new0 - n_cas) + n_cas_new
+                n_cas_new = int(frac_cas*n_cas_train)
+                n_new1 = (n_new0 - n_cas_train) + n_cas_new
                 for frac_con in frac_con_ls:
                     n_new = int(frac_con*(n_new1-n_cas_new)+n_cas_new)
                     if frac_con == 1 and frac_cas ==1:
-                        suffix = f'.{phen}.n_{n_new}of{n}.seed_{seed}'
+                        suffix = f'.{phen}.n_{n_new}of{n_train}.seed_{seed}'
                     else:
-                        suffix = f'.{phen}.n_{n_new}of{n}.n_cas_{n_cas_new}of{n_cas}.seed_{seed}'
+                        suffix = f'.{phen}.n_{n_new}of{n_train}.n_cas_{n_cas_new}of{n_cas_train}.seed_{seed}'
                     
                     print('Importing GWAS results table...')
                     gwas = hl.import_table(f'{gwas_wd}ss{suffix}.tsv.bgz',force_bgz=True,impute=True)
@@ -165,12 +204,13 @@ if __name__=="__main__":
                                                      pval = gwas[test_mt.rsid].pval)
                     
                     for t in thresholds:
+                        t = str(int(t)) if t==1 else '%.1e' % t
+                        
                         # Thresholding to variants with p-value less than threshold
                         print('\n###############')
                         print(f'Filtering variants by p-value threshold = {t}...')
                         print('###############')
-                        if t != 1:
-                            test_mt1 = test_mt1.filter_rows(test_mt1.pval < t)
+                        test_mt1 = test_mt1.filter_rows(test_mt1.pval < float(t))
                         n_rows = test_mt1.count_rows()
                         print('\n###############')
                         print(f'Number of variants remaining after thresholding: {n_rows}...')
@@ -192,7 +232,7 @@ if __name__=="__main__":
                         print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
                         if not os.path.isdir(local_wd):
                             os.mkdir(local_wd)
-                        subprocess.call(['gsutil','cp',f'{wd}pgs{suffix}.tsv.bgz',local_wd])
+                        subprocess.call(['gsutil','cp',f'{wd}pgs{suffix}.threshold_{t}.tsv.bgz',local_wd])
                         df = pd.read_csv(f'{local_wd}pgs{suffix}.tsv.bgz',delimiter='\t',compression='gzip')
                         r, pval = stats.pearsonr(df.pgs, df.phen)
                         print('\n###########################')
@@ -200,7 +240,7 @@ if __name__=="__main__":
                         print(f'r = {r}, pval = {pval}')
                         print('###########################')
                         result = pd.DataFrame(data={'phen': [phen],'desc':phen_dict[phen],
-                                                    'n_train':[n],'n_cas_train':[n_cas],
+                                                    'n_train':[n_train],'n_cas_train':[n_cas_train],
                                                     'n_test':[n_test],'n_cas_test':[n_cas_test],
                                                     'r':[r],'pval':[pval]})
                         corr_file = f'{local_wd}corr{suffix}.threshold_{t}.tsv'
