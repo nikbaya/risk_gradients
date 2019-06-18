@@ -228,7 +228,9 @@ if __name__ == "__main__":
             mt1, _, _ = downsample(mt=mt,frac=frac_all,phen=mt.phen,for_cases=None,seed=seed)
             for frac_cas in frac_cas_ls:
                 mt2, _, _ = downsample(mt=mt1,frac=frac_cas,phen=mt1.phen,for_cases=1,seed=seed)
-                for frac_con in frac_con_ls[1:]:
+                if frac_cas < 1:
+                    mt2.write(f'{wd}train.{phen}.frac_cas_{frac_cas}.seed_{seed}.mt')
+                for frac_con in frac_con_ls:
                     start_iter = dt.datetime.now()
                     mt3, n_new, n_cas_new = downsample(mt=mt2,frac=frac_con,phen=mt2.phen,for_cases=0,seed=seed)
 
