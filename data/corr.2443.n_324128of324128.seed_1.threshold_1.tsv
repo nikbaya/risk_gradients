@@ -1,0 +1,2 @@
+phen	desc	n_train	n_cas_train	n_test	n_cas_test	r	pval
+2443	diabetes	324128	15494	36014	1778	0.08374989427380612	4.535266990139881e-57

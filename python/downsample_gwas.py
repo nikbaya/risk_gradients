@@ -36,9 +36,9 @@ frac_con_ls = [1] if frac_con_ls == None else frac_con_ls
 
 variant_set = 'hm3'
 phen_dict = {
-    '50':'height',
-    '2443':'diabetes',
-    '21001':'bmi',
+    '50':['height', 360338, 0, 324304, 0],
+    '2443':['diabetes', 360142, 17272, 324128, 15494],
+    '21001':['BMI',359933, 0, 323940, 0]
 }
 wd = 'gs://nbaya/risk_gradients/' #working directory in cloud
 local_wd = '/home/nbaya/' #working directory for VM instance
@@ -46,11 +46,12 @@ gwas_wd = wd+'gwas/'
 
 def get_mt(phen, variant_set, test_set=0.1, get='both', overwrite=False, seed=None):
     print('\n###############')
-    print(f'phen: {phen_dict[phen]} (code: {phen})')
+    print(f'phen: {phen_dict[phen][0]} (code: {phen})')
     print(f'get: {"training and testing sets" if get=="both" else get+"ing set"}')
     print(f'overwrite: {overwrite}')
     print(f'seed: {seed}')
     print('###############')
+    start = dt.datetime.now()
     if not os.path.isdir(local_wd):
         os.mkdir(local_wd)
     train_mt_path = f'{wd}train.{phen}.seed_{seed}.mt'
@@ -61,10 +62,9 @@ def get_mt(phen, variant_set, test_set=0.1, get='both', overwrite=False, seed=No
     subprocess.call(['gsutil','cp',test_mt_path+'/_SUCCESS',test_success])
     if ((not os.path.isfile(train_success) and (get=='both' or get=='train')) 
             or (not os.path.isfile(test_success) and get=='both' or get=='test')):
-        start = dt.datetime.now()
         mt0 = hl.read_matrix_table(f'gs://nbaya/split/ukb31063.{variant_set}_variants.gwas_samples_repart.mt')
     
-        print(f'\nReading UKB phenotype {phen_dict[phen]} (code: {phen})...')
+        print(f'\nReading UKB phenotype {phen_dict[phen][0]} (code: {phen})...')
         phen_tb0 = hl.import_table('gs://phenotype_31063/ukb31063.phesant_phenotypes.both_sexes.tsv.bgz',
                                    missing='',impute=True,types={'"userId"': hl.tstr}).rename({ '"userId"': 's', '"'+phen+'"': 'phen'})
         phen_tb0 = phen_tb0.key_by('s')
@@ -126,6 +126,8 @@ def get_mt(phen, variant_set, test_set=0.1, get='both', overwrite=False, seed=No
             n_cas_test = test_mt.filter_cols(test_mt.phen == 1).count_cols()
 
     else: #matrix tables already written
+        n = phen_dict[phen][1]
+        n_cas = phen_dict[phen][2]
         if get=='train' or get=='both':
             train_mt =  hl.read_matrix_table(train_mt_path)
             n_train = train_mt.count_cols()
@@ -143,12 +145,12 @@ def get_mt(phen, variant_set, test_set=0.1, get='both', overwrite=False, seed=No
     
     elapsed = dt.datetime.now() - start
     msg = '\n###############'
-    msg += f'\nOriginal prevalence of {phen_dict[phen]} (code: {phen}): {round(n_cas/n,6)}'
+    msg += f'\nOriginal prevalence of {phen_dict[phen][0]} (code: {phen}): {round(n_cas/n,6)}'
     msg += f'\nPrevalence in training dataset: {round(n_cas_train/n_train,6)}' if (get=='both' or get=='train') else ''
     msg += f'\nPrevalence in testing dataset: {round(n_cas_test/n_test,6)}' if (get=='both' or get=='test') else ''
     msg += f'\n(Note: If trait is not binary, these will probably all be 0)'
     msg += f'\nTime to get {"training and testing sets" if get=="both" else get+"ing set"}: {round(elapsed.seconds/60, 2)} minutes'
-    msg += '\n###############'
+    msg += '\n###############\n'
     print(msg)
     
     return train_mt, n_train, n_cas_train, test_mt, n_test, n_cas_test
@@ -205,7 +207,7 @@ def downsample(mt, frac, phen, for_cases=None, seed = None):
 
 if __name__ == "__main__":
     header =  '\n############\n'
-    header += f'Phenotypes to downsample: {[phen_dict[phen]+f" (code: {phen})" for phen in phen_ls]}\n'
+    header += f'Phenotypes to downsample: {[phen_dict[phen][0]+f" (code: {phen})" for phen in phen_ls]}\n'
     header += f'Downsampling fractions for all: {frac_all_ls}\n' if frac_all_ls != None else ''
     header += f'Downsampling fractions for cases: {frac_cas_ls}\n' if frac_cas_ls != None else ''
     header += f'Downsampling fractions for controls: {frac_con_ls}\n' if frac_con_ls != None else ''
@@ -215,7 +217,7 @@ if __name__ == "__main__":
 
     for phen in phen_ls:
         print('\n############')
-        print(f'Starting phenotype: {phen_dict[phen]} (code: {phen})')
+        print(f'Starting phenotype: {phen_dict[phen][0]} (code: {phen})')
         print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
         print('############')
         mt, n_train, n_cas_train, _, _, _ = get_mt(phen, variant_set, seed=seed, get='train')
@@ -234,9 +236,9 @@ if __name__ == "__main__":
                     mt3 = mt3.annotate_entries(GT = gt0[(mt3.locus,mt3.alleles),mt3.s].GT)
                     mt3 = mt3.annotate_rows(maf = hl.agg.stats(mt3.GT.n_alt_alleles()).mean/2) # annotate with maf
                     if frac_con == 1 and frac_cas ==1:
-                        suffix = '{phen}.n_{n_new}of{n_train}.seed_{seed}.tsv.bgz'
+                        suffix = f'{phen}.n_{n_new}of{n_train}.seed_{seed}.tsv.bgz'
                     else:
-                        suffix = '{phen}.n_{n_new}of{n_train}.n_cas_{n_cas_new}of{n_cas_train}.seed_{seed}.tsv.bgz'
+                        suffix = f'{phen}.n_{n_new}of{n_train}.n_cas_{n_cas_new}of{n_cas_train}.seed_{seed}.tsv.bgz'
                     cols = mt3.cols().key_by().select('s')
                     cols = cols.annotate(iid=cols.s).annotate(s=1).rename({'s':'fid'}).export(f'{gwas_wd}iid.{suffix}')
 
@@ -265,14 +267,14 @@ if __name__ == "__main__":
                     ss.export(f'{gwas_wd}ss.{suffix}')
                     elapsed_iter = dt.datetime.now()-start_iter
                     print('\n############')
-                    print(f'Finished GWAS for downsampled phenotype: {phen_dict[phen]} (code: {phen})')
+                    print(f'Finished GWAS for downsampled phenotype: {phen_dict[phen][0]} (code: {phen})')
                     print(f'frac_all = {frac_all}, frac_cas = {frac_cas}, frac_con = {frac_con}')
                     print(f'Time for downsampled GWAS: '+str(round(elapsed_iter.seconds/60, 2))+' minutes')
                     print('############')
 
         elapsed_phen = dt.datetime.now()-start_phen
         print('\n############')
-        print(f'Finished phenotype: {phen_dict[phen]} (code: {phen})')
+        print(f'Finished phenotype: {phen_dict[phen][0]} (code: {phen})')
         print(f'Number of downsampling fraction combinations: {len(frac_all_ls)*len(frac_con_ls)*len(frac_cas_ls)}')
         print('Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now()))
         print(f'Time for phenotype: '+str(round(elapsed_phen.seconds/60, 2))+' minutes')
