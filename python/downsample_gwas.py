@@ -246,7 +246,7 @@ if __name__ == "__main__":
 
                     cov_list = [ mt3['isFemale'], mt3['age'], mt3['age_squared'], mt3['age_isFemale'],
                         mt3['age_squared_isFemale'] ]+ [mt3['PC{:}'.format(i)] for i in range(1, 21)]
-
+                    
                     ht = hl.linear_regression_rows(
                             y=mt3.phen,
                             x=mt3.dosage,
