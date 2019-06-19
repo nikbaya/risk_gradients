@@ -107,7 +107,7 @@ fig.savefig(f'{local_wd}plots/{phen}_pgs_prediction.png',dpi=600)
 plt.close()
     
 if n_cas > 0:
-    df = df.sort_values(by='r')
+    df = df.sort_values(by='n_cas')
     x = (1/df.n_cas_train + 1/(df.n_train-df.n_cas_train))
     y = 1/df.r**2
     plt.plot(x, y,'.-')
