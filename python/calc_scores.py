@@ -208,22 +208,27 @@ if __name__=="__main__":
                                                      pval = gwas[test_mt.rsid].pval)
                     
                     for t in thresholds:
-                        t = str(int(t)) if t==1 else '%.1e' % t
                         
                         # Thresholding to variants with p-value less than threshold
                         n_rows1 = test_mt1.count_rows()
-                        print('\n###############')
-                        print(f'Filtering variants by p-value threshold = {t}...')
-                        print(f'Number of variants before thresholding: {n_rows1}...')
-                        print('###############\n')
-                        test_mt1 = test_mt1.filter_rows(test_mt1.pval < float(t))
-                        n_rows2 = test_mt1.count_rows()
-                        print('\n###############')
-                        print(f'Finished filtering variants by p-value threshold = {t}...')
-                        print(f'Number of variants before thresholding: {n_rows1}...')
-                        print(f'Number of variants remaining after thresholding: {n_rows2}...')
-                        print('###############\n')
-
+                        if t == 1: #if p-value threshold == 1
+                            print('\n###############')
+                            print(f'p-value threshold = {t}, not filtering any of the {n_rows1} variants')
+                            print('###############\n')
+                        else: 
+                            t = str(int(t)) if t==1 else '%.1e' % t
+                            print('\n###############')
+                            print(f'Filtering variants by p-value threshold = {t}...')
+                            print(f'Number of variants before thresholding: {n_rows1}...')
+                            print('###############\n')
+                            test_mt1 = test_mt1.filter_rows(test_mt1.pval < float(t))
+                            n_rows2 = test_mt1.count_rows()
+                            print('\n###############')
+                            print(f'Finished filtering variants by p-value threshold = {t}...')
+                            print(f'Number of variants before thresholding: {n_rows1}...')
+                            print(f'Number of variants remaining after thresholding: {n_rows2}...')
+                            print('###############\n')
+                                  
                         print('\nCalculating PGS...')
                         print(f'frac_all: {frac_all}\tfrac_cas: {frac_cas}\tfrac_con: {frac_con}')
                         print('Time: {:%H:%M:%S (%Y-%b-%d)}\n'.format(dt.datetime.now()))

@@ -65,7 +65,7 @@ def get_mt(phen, variant_set, test_set=0.1, get='both', overwrite=False, seed=No
         mt0 = hl.read_matrix_table(f'gs://nbaya/split/ukb31063.{variant_set}_variants.gwas_samples_repart.mt')
     
         print(f'\nReading UKB phenotype {phen_dict[phen][0]} (code: {phen})...')
-        phen_tb0 = hl.import_table('gs://phenotype_31063/ukb31063.phesant_phenotypes.both_sexes.tsv.bgz',
+        phen_tb0 = hl.import_table('gs://ukb31063/ukb31063.phenotypes.tsv.bgz',
                                    missing='',impute=True,types={'"userId"': hl.tstr}).rename({ '"userId"': 's', '"'+phen+'"': 'phen'})
         phen_tb0 = phen_tb0.key_by('s')
         phen_tb = phen_tb0.select(phen_tb0['phen'])
@@ -220,7 +220,7 @@ def downsample(mt, frac, phen, for_cases=None, seed = None):
         header += f'n: {n}\n'
         header += f'n_cas: {n_cas}\nn_con: {n-n_cas}\nprevalence: {round(n_cas/n,6)}\n' if for_cases != None else ''
         header += f'seed: {seed}\n'
-        header += 'Time: {:%H:%M:%S (%Y-%b-%d)}'.format(dt.datetime.now())
+        header += 'Time: {:%H:%M:%S (%Y-%b-%d)}\n'.format(dt.datetime.now())
         header += '############'
         print(header)        
         randstate = np.random.RandomState(int(seed)) #seed random state for replicability
@@ -268,6 +268,21 @@ if __name__ == "__main__":
     header += '############'
     print(header)
 
+    variants = hl.import_table('gs://nbaya/split/hapmap3_variants.tsv')
+    variants = variants.annotate(**hl.parse_variant(variants.v))
+    variants = variants.key_by('locus','alleles') 
+#    gt0 = hl.read_matrix_table('gs://phenotype_31063/hail/imputed/ukb31063.GT.autosomes.mt/')
+#    gt0 = hl.import_bgen(path='gs://fc-7d5088b4-7673-45b5-95c2-17ae00a04183/imputed/ukb_imp_chr{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22}_v3.bgen',
+#                         entry_fields=['GT'],
+#                         sample_file = 'gs://ukb31063/ukb31063.autosomes.sample',
+#                         variants=variants)
+    gt0 = hl.import_bgen(path='gs://fc-7d5088b4-7673-45b5-95c2-17ae00a04183/imputed/ukb_imp_chr'+str(set(range(1,23))).replace(' ','')+'_v3.bgen',
+                         entry_fields=['GT'],
+                         n_partitions = 1000,
+                         sample_file = 'gs://ukb31063/ukb31063.autosomes.sample',
+                         variants=variants)
+
+
     for phen in phen_ls:
         print('\n############')
         print(f'Starting phenotype: {phen_dict[phen][0]} (code: {phen})')
@@ -287,12 +302,11 @@ if __name__ == "__main__":
                     start_iter = dt.datetime.now()
                     mt3, n_new, n_cas_new = downsample(mt=mt2,frac=frac_con,phen=mt2.phen,for_cases=0,seed=seed)
 
-                    start0 = dt.datetime.now()
-                    print(mt3.count_cols())
-                    elapsed0 = dt.datetime.now()-start0
-                    print(f'Time to count: '+str(round(elapsed0.seconds/60, 2))+' minutes')
+#                    start0 = dt.datetime.now()
+#                    print(mt3.count_cols())
+#                    elapsed0 = dt.datetime.now()-start0
+#                    print(f'Time to count: '+str(round(elapsed0.seconds/60, 2))+' minutes')
                     
-                    gt0 = hl.read_matrix_table('gs://phenotype_31063/hail/imputed/ukb31063.GT.autosomes.mt/')
                     mt3 = mt3.annotate_entries(GT = gt0[(mt3.locus,mt3.alleles),mt3.s].GT)
                     mt3 = mt3.annotate_rows(maf = hl.agg.stats(mt3.GT.n_alt_alleles()).mean/2) # annotate with maf
                     if frac_con == 1 and frac_cas ==1:
