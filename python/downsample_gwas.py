@@ -268,14 +268,14 @@ if __name__ == "__main__":
     header += '############'
     print(header)
 
-    variants = hl.import_table('gs://nbaya/split/hapmap3_variants.tsv')
-    variants = variants.annotate(**hl.parse_variant(variants.v))
-    variants = variants.key_by('locus','alleles') 
 #    gt0 = hl.read_matrix_table('gs://phenotype_31063/hail/imputed/ukb31063.GT.autosomes.mt/')
 #    gt0 = hl.import_bgen(path='gs://fc-7d5088b4-7673-45b5-95c2-17ae00a04183/imputed/ukb_imp_chr{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22}_v3.bgen',
 #                         entry_fields=['GT'],
 #                         sample_file = 'gs://ukb31063/ukb31063.autosomes.sample',
 #                         variants=variants)
+    variants = hl.import_table('gs://nbaya/split/hapmap3_variants.tsv')
+    variants = variants.annotate(**hl.parse_variant(variants.v))
+    variants = variants.key_by('locus','alleles') 
     gt0 = hl.import_bgen(path='gs://fc-7d5088b4-7673-45b5-95c2-17ae00a04183/imputed/ukb_imp_chr'+str(set(range(1,23))).replace(' ','')+'_v3.bgen',
                          entry_fields=['GT'],
                          n_partitions = 1000,

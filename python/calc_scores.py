@@ -78,7 +78,7 @@ def get_mt(phen, test_set=0.1, get='both', overwrite=False, seed=None):
         mt0 = hl.read_matrix_table(f'gs://nbaya/split/ukb31063.hm3_variants.gwas_samples_repart.mt') #use hm3 snps
     
         print(f'\nReading UKB phenotype {phen_dict[phen][0]} (code: {phen})...')
-        phen_tb0 = hl.import_table('gs://phenotype_31063/ukb31063.phesant_phenotypes.both_sexes.tsv.bgz',
+        phen_tb0 = hl.import_table('gs://ukb31063/ukb31063.phenotypes.tsv.bgz',
                                    missing='',impute=True,types={'"userId"': hl.tstr}).rename({ '"userId"': 's', '"'+phen+'"': 'phen'})
         phen_tb0 = phen_tb0.key_by('s')
         phen_tb = phen_tb0.select(phen_tb0['phen'])
