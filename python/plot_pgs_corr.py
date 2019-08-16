@@ -51,7 +51,9 @@ n_train = phen_dict[phen][3]
 n_cas_train = phen_dict[phen][4]
 seed = 1
 thresholds = [1]
-df_path = f'{local_wd}data/pgs_results.{phen}.{phen_dict[phen][0]}.tsv'
+
+#df_path = f'{local_wd}data/pgs_results.{phen}.{phen_dict[phen][0]}.tsv' #PGS from real phenotypes
+df_path = f'corr.qc_pos.maf_0.05.h2_0.75.pi_0.001.1kg_eur_hm3.tsv' #PGS from simulated phenotype (h2=0.75, pi=0.001)
 
 if os.path.isfile(df_path):
     df = pd.read_csv(df_path,delimiter='\t')
@@ -162,5 +164,49 @@ df.to_csv(df_path,sep='\t',index=False)
 
 
 
+# manually create df of correlation results for PRS-CS on simulated phenotype
+
+phi_ls = ['auto']*5+['1e-04']*5+['1e-02']*5+['unadjusted_20k.2']*5+['auto_20k.2']*5+['1e-04_20k.2']*5+['unadjusted']*5+['adjusted_for_gt']*5+['1e-04_20k.1']*5
+n_train_ls = [100e3,50e3,20e3,10e3,5e3]*9
+r_ls = ([0.01961128210830167, 0.01810725228506255, 0.012086870633101371, 0.01618182413705427, None]+
+        [0.019765671503524318, 0.01885229267730592, 0.01137816625819181, 0.015117878493456036, None]+
+        [0.013164964950006268, 0.01660796695692432, 0.0023512848724231354, 0.007431955352743687, -6.287289113239286e-05]+
+        [0.5675647978884869, 0.5130533441074888, 0.3705280797170161, 0.35187445614864826, 0.25075562987294314]+
+        [0.8000138498267761, 0.7642981905354923, 0.6261882140459507, 0.5133394741415235, None]+
+        [0.8024935965673357, None, None, None, None]+
+        [0.02342598567835493, 0.01962260208225034, 0.007687792701004736, None, None]+
+        [None, None, None, None, None]+
+        [None, None, None, 0.5154029701709931, None])
+
+df = pd.DataFrame(data=list(zip(phi_ls,n_train_ls,r_ls)),columns=['phi','n_train','r'])
+df['inv_n_train'] = 1/df.n_train
+df['inv_R2'] = df.r**(-2)
 
 
+phi = '1e-04'
+phi='unadjusted_20k.2'
+phi='auto_20k'
+
+
+df_tmp = df[df.phi==phi]
+df_tmp = df_tmp.dropna(axis=0)
+
+x = (df_tmp.inv_n_train).values.reshape(-1,1)
+y = (df_tmp.inv_R2).values
+
+fig,ax = plt.subplots(figsize=(1.5*6,1.5*4))
+plt.plot(x,y,'.',ms=10)
+model = LinearRegression().fit(x,y)
+r2 = model.score(x,y)
+b, a = model.intercept_, model.coef_[0]
+plt.plot(x,a*x+b,'k--',alpha=0.5)
+plt.title(f'{f"PRS-CS, phi={phi}" if "unadjusted" not in phi else f"not PRS-CS, {phi}"}')
+plt.ylabel('1/R^2')
+plt.xlabel('1/N')
+locs, labels = plt.xticks()
+plt.xticks(locs[::2],[str(round(x,10)) for x in locs[::2]],rotation=0)
+plt.legend(['1/N vs. 1/R^2','OLS fit'],loc='lower right')
+plt.text(x=min(df_tmp.inv_n_train)-(0.0)*(max(df_tmp.inv_n_train)-min(df_tmp.inv_n_train)), 
+         y=max(df_tmp.inv_R2)-(0.2)*(max(df_tmp.inv_R2)-min(df_tmp.inv_R2)),
+         s=f'y = {round(a,6)}*x + {round(b,6)}\nR^2 = {round(r2,6)}\nh2_M = {round(1/b,6)}\nM_e = {int(round(a/b**2))}')
+fig.savefig(f'{local_wd}plots/{f"prs_cs.phi_{phi}" if "unadjusted" not in phi else f"unadjusted_betas.{phi}"}.png',dpi=600)
