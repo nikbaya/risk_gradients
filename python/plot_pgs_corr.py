@@ -166,17 +166,23 @@ df.to_csv(df_path,sep='\t',index=False)
 
 # manually create df of correlation results for PRS-CS on simulated phenotype
 
-phi_ls = ['auto']*5+['1e-04']*5+['1e-02']*5+['unadjusted_20k.2']*5+['auto_20k.2']*5+['1e-04_20k.2']*5+['unadjusted']*5+['adjusted_for_gt']*5+['1e-04_20k.1']*5
-n_train_ls = [100e3,50e3,20e3,10e3,5e3]*9
-r_ls = ([0.01961128210830167, 0.01810725228506255, 0.012086870633101371, 0.01618182413705427, None]+
-        [0.019765671503524318, 0.01885229267730592, 0.01137816625819181, 0.015117878493456036, None]+
-        [0.013164964950006268, 0.01660796695692432, 0.0023512848724231354, 0.007431955352743687, -6.287289113239286e-05]+
-        [0.5675647978884869, 0.5130533441074888, 0.3705280797170161, 0.35187445614864826, 0.25075562987294314]+
-        [0.8000138498267761, 0.7642981905354923, 0.6261882140459507, 0.5133394741415235, None]+
-        [0.8024935965673357, None, None, None, None]+
-        [0.02342598567835493, 0.01962260208225034, 0.007687792701004736, None, None]+
-        [None, None, None, None, None]+
-        [None, None, None, 0.5154029701709931, None])
+#phi_ls = ['auto']*5+['1e-04']*5+['1e-02']*5+['unadjusted_20k.2']*5+['auto_20k.2']*5+['1e-04_20k.2']*5+['unadjusted']*5+['adjusted_for_gt']*5+['1e-04_20k.1']*5
+#n_train_ls = [100e3,50e3,20e3,10e3,5e3]*9
+#r_ls = ([0.01961128210830167, 0.01810725228506255, 0.012086870633101371, 0.01618182413705427, None]+
+#        [0.019765671503524318, 0.01885229267730592, 0.01137816625819181, 0.015117878493456036, None]+
+#        [0.013164964950006268, 0.01660796695692432, 0.0023512848724231354, 0.007431955352743687, -6.287289113239286e-05]+
+#        [0.5675647978884869, 0.5130533441074888, 0.3705280797170161, 0.35187445614864826, 0.25075562987294314]+
+#        [0.8000138498267761, 0.7642981905354923, 0.6261882140459507, 0.5133394741415235, 0.2814180105302948]+
+#        [0.8024935965673357, None, None, None, None]+
+#        [0.02342598567835493, 0.01962260208225034, 0.007687792701004736, None, None]+
+#        [None, None, None, None, None]+
+#        [0.7960075999310807, 0.7692464924313965, 0.8966909190525392, 0.5154029701709931, 0.3484632287132207])
+
+phi_ls = ['1e-04.v2']*5+['pt.v2']*5+['pt.pval1e-5.v2']*5
+n_train_ls = [100e3,50e3,20e3,10e3,5e3]*3
+r_ls = ([0.7813541803428697, 0.7461795210965818, 0.6326378796536457, 0.4918373903330486, 0.326580942701403]+
+        [0.41553381380344345, 0.3352062577049098, 0.23900831395025654, 0.1779981040780986, 0.1300415036081481]+
+        [0.5375847672928772, 0.5374276560136735, 0.524343722267456, 0.5134197109705413, 0.47337418840176076])
 
 df = pd.DataFrame(data=list(zip(phi_ls,n_train_ls,r_ls)),columns=['phi','n_train','r'])
 df['inv_n_train'] = 1/df.n_train
@@ -184,17 +190,30 @@ df['inv_R2'] = df.r**(-2)
 
 
 phi = '1e-04'
+phi='auto_20k.2'
+phi='1e-04_20k.1'
+phi='1e-04_20k.2'
 phi='unadjusted_20k.2'
-phi='auto_20k'
+phi = '1e-04.v2'
+phi = 'pt.v2'
+phi = 'pt.pval1e-5.v2'
 
 
 df_tmp = df[df.phi==phi]
 df_tmp = df_tmp.dropna(axis=0)
 
-x = (df_tmp.inv_n_train).values.reshape(-1,1)
-y = (df_tmp.inv_R2).values
+
+fig,ax = plt.subplots(figsize=(1*6,1*4))
+plt.plot(df_tmp.n_train, df_tmp.r**2,'.-',ms=10)
+plt.xlabel('# of individuals in training set')
+plt.ylabel('R^2')
+plt.title(f'R^2 between PRS and simulated phenotype\nas a function of training set size (phi={phi})')
+fig.savefig(f'{local_wd}plots/n_train_R2.{f"prs_cs.phi_{phi}" if "unadjusted" not in phi else f"unadjusted_betas.{phi}"}.png',dpi=600)
+
 
 fig,ax = plt.subplots(figsize=(1.5*6,1.5*4))
+x = (df_tmp.inv_n_train).values.reshape(-1,1)
+y = (df_tmp.inv_R2).values
 plt.plot(x,y,'.',ms=10)
 model = LinearRegression().fit(x,y)
 r2 = model.score(x,y)
@@ -204,9 +223,9 @@ plt.title(f'{f"PRS-CS, phi={phi}" if "unadjusted" not in phi else f"not PRS-CS, 
 plt.ylabel('1/R^2')
 plt.xlabel('1/N')
 locs, labels = plt.xticks()
-plt.xticks(locs[::2],[str(round(x,10)) for x in locs[::2]],rotation=0)
+plt.xticks(locs[::],[str(round(x,10)) for x in locs[::]],rotation=0)
 plt.legend(['1/N vs. 1/R^2','OLS fit'],loc='lower right')
 plt.text(x=min(df_tmp.inv_n_train)-(0.0)*(max(df_tmp.inv_n_train)-min(df_tmp.inv_n_train)), 
          y=max(df_tmp.inv_R2)-(0.2)*(max(df_tmp.inv_R2)-min(df_tmp.inv_R2)),
          s=f'y = {round(a,6)}*x + {round(b,6)}\nR^2 = {round(r2,6)}\nh2_M = {round(1/b,6)}\nM_e = {int(round(a/b**2))}')
-fig.savefig(f'{local_wd}plots/{f"prs_cs.phi_{phi}" if "unadjusted" not in phi else f"unadjusted_betas.{phi}"}.png',dpi=600)
+fig.savefig(f'{local_wd}plots/inv_n_train_inv_R2.{f"prs_cs.phi_{phi}" if "unadjusted" not in phi else f"unadjusted_betas.{phi}"}.png',dpi=600)
