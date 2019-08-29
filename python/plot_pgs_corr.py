@@ -178,11 +178,17 @@ df.to_csv(df_path,sep='\t',index=False)
 #        [None, None, None, None, None]+
 #        [0.7960075999310807, 0.7692464924313965, 0.8966909190525392, 0.5154029701709931, 0.3484632287132207])
 
-phi_ls = ['1e-04.v2']*5+['pt.v2']*5+['pt.pval1e-5.v2']*5
-n_train_ls = [100e3,50e3,20e3,10e3,5e3]*3
-r_ls = ([0.7813541803428697, 0.7461795210965818, 0.6326378796536457, 0.4918373903330486, 0.326580942701403]+
+phi_ls = ['1e-04.v2']*27+['pt.v2']*5+['pt.pval1e-5.v2']*5
+n_train_ls = [100e3,50e3,20e3,10e3,5e3,5e3,5e3,5e3,5e3,5e3]+[100e3,50e3,20e3,10e3,5e3]*2
+r_ls = ([0.7813541803428697, 0.7461795210965818, 0.7784047015796418, 
+         0.7461795210965818, 0.7426601269397713, 0.7430362951597826, 0.7437474281984784, 0.7510667097017896, 0.7459899597930412,
+         0.6326378796536457, 0.6377665057247787, 0.6273342713555827, None, None, None, 
+         0.4918373903330486, None, None, None, None, None,
+         0.326580942701403, 0.31876620949114404, 0.3427734970871236, 0.3228223949060413, 0.32405540671872174, 0.3072100818392767]+
         [0.41553381380344345, 0.3352062577049098, 0.23900831395025654, 0.1779981040780986, 0.1300415036081481]+
         [0.5375847672928772, 0.5374276560136735, 0.524343722267456, 0.5134197109705413, 0.47337418840176076])
+
+
 
 df = pd.DataFrame(data=list(zip(phi_ls,n_train_ls,r_ls)),columns=['phi','n_train','r'])
 df['inv_n_train'] = 1/df.n_train
@@ -194,6 +200,7 @@ phi='auto_20k.2'
 phi='1e-04_20k.1'
 phi='1e-04_20k.2'
 phi='unadjusted_20k.2'
+
 phi = '1e-04.v2'
 phi = 'pt.v2'
 phi = 'pt.pval1e-5.v2'
@@ -229,3 +236,160 @@ plt.text(x=min(df_tmp.inv_n_train)-(0.0)*(max(df_tmp.inv_n_train)-min(df_tmp.inv
          y=max(df_tmp.inv_R2)-(0.2)*(max(df_tmp.inv_R2)-min(df_tmp.inv_R2)),
          s=f'y = {round(a,6)}*x + {round(b,6)}\nR^2 = {round(r2,6)}\nh2_M = {round(1/b,6)}\nM_e = {int(round(a/b**2))}')
 fig.savefig(f'{local_wd}plots/inv_n_train_inv_R2.{f"prs_cs.phi_{phi}" if "unadjusted" not in phi else f"unadjusted_betas.{phi}"}.png',dpi=600)
+
+
+#test quadratic fit
+import statsmodels.formula.api as sm_api
+from statsmodels.stats.anova import anova_lm
+
+model_type = 'quad'
+
+if model_type=='lin':
+    model = sm_api.ols(formula = 'inv_R2 ~ 1 + inv_n_train ', data = df_tmp).fit()
+elif model_type=='quad':
+    model = sm_api.ols(formula = 'inv_R2 ~ 1 + inv_n_train + I(inv_n_train**2) ', data = df_tmp).fit()
+#model = sm_api.ols(formula = 'inv_R2 ~ 1 + I(inv_n_train**2) + inv_n_train ', data = df_tmp).fit()
+
+anova = anova_lm(model)
+print(f'{("Linear" if model_type is "lin" else ("Quadratic" if model_type is "quad" else "Unspecified"))} model')
+print(anova)
+print(model.summary())
+
+fig,ax = plt.subplots(figsize=(1.5*6,1.5*4))
+grouped = pd.DataFrame(data={'inv_n_train':df_tmp.groupby('inv_n_train')['inv_R2'].mean().index,
+                             'mean_inv_R2':df_tmp.groupby('inv_n_train')['inv_R2'].mean().values,
+                             'std_inv_R2': df_tmp.groupby('inv_n_train')['inv_R2'].std().values})
+x_obs = (df_tmp.inv_n_train).values
+y_obs = (df_tmp.inv_R2).values
+#p2,p1,p0 = np.polyfit(x_obs,y_obs,2) #save each coefficient as p{deg}
+x = np.linspace(min(x_obs), max(x_obs),20)
+y_hat = model.params.inv_n_train*x + model.params.Intercept
+if  'I(inv_n_train ** 2)' in model.params:
+    y_hat += model.params['I(inv_n_train ** 2)']*x**2
+#plt.plot(x_obs,y_obs,'.',ms=10)
+plt.errorbar(x=grouped.inv_n_train,y=grouped.mean_inv_R2,yerr=grouped.std_inv_R2*2,
+             fmt='.',ms=10)
+plt.plot(x,y_hat,'k--',alpha=0.5)
+plt.title(f'{f"PRS-CS, phi={phi}" if "unadjusted" not in phi else f"not PRS-CS, {phi}"}')
+locs, labels = plt.xticks()
+plt.xticks(locs[::2],[str(round(x,10)) for x in locs[::2]],rotation=0)
+plt.legend([f'{("Linear" if model_type is "lin" else ("Quadratic" if model_type is "quad" else "Unspecified"))} model',
+               '1/N vs. 1/R^2'],loc='lower right')
+plt.ylabel('1/R^2')
+plt.xlabel('1/N')
+fig.savefig(f'{local_wd}plots/inv_n_train_inv_R2.model_{model_type}.{f"prs_cs.phi_{phi}" if "unadjusted" not in phi else f"unadjusted_betas.{phi}"}.png',dpi=600)
+
+
+
+# read in chr22 results
+df_chr22 = pd.read_csv(local_wd+'data/corr.chr22.qc_pos.maf_0.05.h2_0.75.pi_0.001.1kg_eur_hm3.phi_1e-04.tsv',
+                 sep='\t')
+df_chr22['inv_n_train'] = 1/df_chr22.n_train
+df_chr22['inv_R2'] = df_chr22.r**(-2)
+
+import statsmodels.formula.api as sm_api
+from statsmodels.stats.anova import anova_lm
+
+model_type = 'quad'
+
+if model_type=='lin':
+    model = sm_api.ols(formula = 'inv_R2 ~ 1 + inv_n_train ', data = df_chr22).fit()
+elif model_type=='quad':
+    model = sm_api.ols(formula = 'inv_R2 ~ 1 + inv_n_train + I(inv_n_train**2) ', data = df_chr22).fit()
+
+anova = anova_lm(model)
+print(f'{("Linear" if model_type is "lin" else ("Quadratic" if model_type is "quad" else "Unspecified"))} model')
+print(anova)
+print(model.summary())
+
+fig,ax = plt.subplots(figsize=(1.5*6,1.5*4))
+grouped = pd.DataFrame(data={'inv_n_train':df_chr22.groupby('inv_n_train')['inv_R2'].mean().index,
+                             'mean_inv_R2':df_chr22.groupby('inv_n_train')['inv_R2'].mean().values,
+                             'std_inv_R2': df_chr22.groupby('inv_n_train')['inv_R2'].std().values})
+x_obs = (df_chr22.inv_n_train).values
+y_obs = (df_chr22.inv_R2).values
+#p2,p1,p0 = np.polyfit(x_obs,y_obs,2) #save each coefficient as p{deg}
+x = np.linspace(min(x_obs), max(x_obs),20)
+y_hat = model.params.inv_n_train*x + model.params.Intercept
+if  'I(inv_n_train ** 2)' in model.params:
+    y_hat += model.params['I(inv_n_train ** 2)']*x**2
+#plt.plot(x_obs,y_obs,'.',ms=10)
+plt.errorbar(x=grouped.inv_n_train,y=grouped.mean_inv_R2,yerr=grouped.std_inv_R2*2,
+             fmt='.',ms=10)
+plt.plot(x,y_hat,'k--',alpha=0.5)
+plt.title(f'PRS-CS, chr22')
+locs, labels = plt.xticks()
+plt.xticks(locs[::],[str(round(x,10)) for x in locs[::]],rotation=0)
+plt.legend([f'{("Linear" if model_type is "lin" else ("Quadratic" if model_type is "quad" else "Unspecified"))} model',
+               '1/N vs. 1/R^2'],loc='lower right')
+plt.ylabel('1/R^2')
+plt.xlabel('1/N')
+fig.savefig(f'{local_wd}plots/inv_n_train_inv_R2.model_{model_type}.chr22.png',dpi=300)
+
+
+
+
+
+# read in chr22 (unadjusted -- non-PRS-CS)
+phi_ls = ['chr22.unadjusted']*39
+n_train_ls = [100e3]*3+[50e3]*6+[20e3]*10+[10e3]*10+[5e3]*10
+r_ls = ([0.5260066498667789,0.5249712187300143,0.5239755562396924]+
+        [0.5186951927974995,0.5228232108150805,0.5224150186253562,0.5199980317078371, 0.5275371182111939,0.5224150186253562]+
+        [0.5188571467130012, 0.5105536444409511, 0.5197253689601626, 0.5202132433637073,
+         0.5166925742517846, 0.5143133831414886, 0.5169984858420663, 0.5115868205889093, 0.5112739109685859, 0.5173357194453803]+
+        [0.5027621749260911, 0.4989005647046562, 0.5075022530960592, 0.49821958595031385,
+         0.49571834217577754, 0.4859938907715119, 0.49221941991791407,  0.501038863866561, 0.5131133195220912, 0.49769646390695527]+
+        [0.4724960120788834, 0.4884036202244144, 0.479586230254173, 0.4703282418873503, 
+         0.47081849511267176, 0.48272834939048903, 0.48130254617048673, 0.49065746564611723, 0.4870852805862297, 0.47444025454702576])
+df = pd.DataFrame(data=list(zip(phi_ls,n_train_ls,r_ls)),columns=['phi','n_train','r'])
+df['inv_n_train'] = 1/df.n_train
+df['inv_R2'] = df.r**(-2)
+
+phi = 'chr22.unadjusted'
+
+fig,ax = plt.subplots(figsize=(1*6,1*4))
+plt.plot(df.n_train, df.r**2,'.',ms=10)
+plt.xlabel('# of individuals in training set')
+plt.ylabel('R^2')
+plt.title(f'R^2 between PRS and simulated phenotype\nas a function of training set size (phi={phi})')
+fig.savefig(f'{local_wd}plots/n_train_R2.{f"prs_cs.phi_{phi}" if "unadjusted" not in phi else f"unadjusted_betas.{phi}"}.png',dpi=600)
+
+
+import statsmodels.formula.api as sm_api
+from statsmodels.stats.anova import anova_lm
+
+model_type = 'lin'
+
+if model_type=='lin':
+    model = sm_api.ols(formula = 'inv_R2 ~ 1 + inv_n_train ', data = df).fit()
+elif model_type=='quad':
+    model = sm_api.ols(formula = 'inv_R2 ~ 1 + inv_n_train + I(inv_n_train**2) ', data = df).fit()
+
+anova = anova_lm(model)
+print(f'{("Linear" if model_type is "lin" else ("Quadratic" if model_type is "quad" else "Unspecified"))} model')
+print(anova)
+#print(model.summary())
+
+fig,ax = plt.subplots(figsize=(1.5*6,1.5*4))
+grouped = pd.DataFrame(data={'inv_n_train':df.groupby('inv_n_train')['inv_R2'].mean().index,
+                             'mean_inv_R2':df.groupby('inv_n_train')['inv_R2'].mean().values,
+                             'std_inv_R2': df.groupby('inv_n_train')['inv_R2'].std().values})
+x_obs = (df.inv_n_train).values
+y_obs = (df.inv_R2).values
+#p2,p1,p0 = np.polyfit(x_obs,y_obs,2) #save each coefficient as p{deg}
+x = np.linspace(min(x_obs), max(x_obs),20)
+y_hat = model.params.inv_n_train*x + model.params.Intercept
+if  'I(inv_n_train ** 2)' in model.params:
+    y_hat += model.params['I(inv_n_train ** 2)']*x**2
+#plt.plot(x_obs,y_obs,'.',ms=10)
+plt.errorbar(x=grouped.inv_n_train,y=grouped.mean_inv_R2,yerr=grouped.std_inv_R2*2,
+             fmt='.',ms=10)
+plt.plot(x,y_hat,'k--',alpha=0.5)
+plt.title(f'PRS-CS, chr22')
+locs, labels = plt.xticks()
+plt.xticks(locs[::],[str(round(x,10)) for x in locs[::]],rotation=0)
+plt.legend([f'{("Linear" if model_type is "lin" else ("Quadratic" if model_type is "quad" else "Unspecified"))} model',
+               '1/N vs. 1/R^2'],loc='lower right')
+plt.ylabel('1/R^2')
+plt.xlabel('1/N')
+fig.savefig(f'{local_wd}plots/inv_n_train_inv_R2.model_{model_type}.chr22.undadjusted.png',dpi=300)
