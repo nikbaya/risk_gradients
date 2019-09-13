@@ -179,11 +179,12 @@ df.to_csv(df_path,sep='\t',index=False)
 #        [0.7960075999310807, 0.7692464924313965, 0.8966909190525392, 0.5154029701709931, 0.3484632287132207])
 
 phi_ls = ['1e-04.v2']*27+['pt.v2']*5+['pt.pval1e-5.v2']*5
-n_train_ls = [100e3,50e3,20e3,10e3,5e3,5e3,5e3,5e3,5e3,5e3]+[100e3,50e3,20e3,10e3,5e3]*2
+n_train_ls = ([100e3]*3+[50e3]*6+[20e3]*6+[10e3]*6+[5e3]*6+
+              [100e3,50e3,20e3,10e3,5e3]*2)
 r_ls = ([0.7813541803428697, 0.7461795210965818, 0.7784047015796418, 
          0.7461795210965818, 0.7426601269397713, 0.7430362951597826, 0.7437474281984784, 0.7510667097017896, 0.7459899597930412,
-         0.6326378796536457, 0.6377665057247787, 0.6273342713555827, None, None, None, 
-         0.4918373903330486, None, None, None, None, None,
+         0.6326378796536457, 0.6377665057247787, 0.6273342713555827, 0.6264770581373137, 0.6288191044653261, 0.6276635627709762, 
+         0.4918373903330486, 0.48183169914369894, 0.47921153243983405, 0.4757635537507058, None, None,
          0.326580942701403, 0.31876620949114404, 0.3427734970871236, 0.3228223949060413, 0.32405540671872174, 0.3072100818392767]+
         [0.41553381380344345, 0.3352062577049098, 0.23900831395025654, 0.1779981040780986, 0.1300415036081481]+
         [0.5375847672928772, 0.5374276560136735, 0.524343722267456, 0.5134197109705413, 0.47337418840176076])
@@ -201,9 +202,9 @@ phi='1e-04_20k.1'
 phi='1e-04_20k.2'
 phi='unadjusted_20k.2'
 
-phi = '1e-04.v2'
 phi = 'pt.v2'
 phi = 'pt.pval1e-5.v2'
+phi = '1e-04.v2'
 
 
 df_tmp = df[df.phi==phi]
@@ -211,7 +212,7 @@ df_tmp = df_tmp.dropna(axis=0)
 
 
 fig,ax = plt.subplots(figsize=(1*6,1*4))
-plt.plot(df_tmp.n_train, df_tmp.r**2,'.-',ms=10)
+plt.plot(df_tmp.n_train, df_tmp.r**2,'.',ms=10)
 plt.xlabel('# of individuals in training set')
 plt.ylabel('R^2')
 plt.title(f'R^2 between PRS and simulated phenotype\nas a function of training set size (phi={phi})')
@@ -252,8 +253,8 @@ elif model_type=='quad':
 
 anova = anova_lm(model)
 print(f'{("Linear" if model_type is "lin" else ("Quadratic" if model_type is "quad" else "Unspecified"))} model')
-print(anova)
 print(model.summary())
+print(anova)
 
 fig,ax = plt.subplots(figsize=(1.5*6,1.5*4))
 grouped = pd.DataFrame(data={'inv_n_train':df_tmp.groupby('inv_n_train')['inv_R2'].mean().index,

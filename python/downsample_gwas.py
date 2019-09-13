@@ -106,7 +106,7 @@ def get_mt(phen, variant_set, test_set=0.1, get='both', overwrite=False, seed=No
             train_mt = mt3.filter_cols(mt3.set == 'train')
             n_cas_train = train_mt.filter_cols(train_mt.phen == 1).count_cols()
             print('\nCheckpointing training set matrix table...')
-            train_mt.checkpoint(train_mt_path,overwrite=overwrite)
+            train_mt = train_mt.checkpoint(train_mt_path,overwrite=overwrite)
 
         if (not os.path.isfile(test_success) or overwrite==True) and (get=='test' or get=='both'):
             test_mt = mt3.filter_cols(mt3.set == 'test')
@@ -122,7 +122,7 @@ def get_mt(phen, variant_set, test_set=0.1, get='both', overwrite=False, seed=No
             test_mt = test_mt.key_rows_by('rsid')
             test_mt = test_mt.filter_rows(hl.is_defined(variants[test_mt.rsid])) #filter to variants defined in variants table
             print('\nCheckpointing testing set matrix table...')
-            test_mt.checkpoint(test_mt_path,overwrite=overwrite)
+            test_mt = test_mt.checkpoint(test_mt_path,overwrite=overwrite)
             n_cas_test = test_mt.filter_cols(test_mt.phen == 1).count_cols()
 
     else: #matrix tables already written

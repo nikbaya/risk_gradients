@@ -325,12 +325,16 @@ def get_corr_ldpred(variant_set, maf, h2, pi, use_1kg_eur_hm3_snps, chrom,
     ct_cols = test.count_cols()
     print(f'\n###############\ntest mt col count: {ct_cols}\n###############')
 
-    n_train_subs = [100e3, 50e3, 20e3, 10e3, 5e3]  # 20e3,
+    n_train_subs = [20e3, 10e3, 5e3]  # 20e3,
     n_train_subs = [int(x) for x in n_train_subs]
 
     n_train = 300e3
     
-    ii=0 #temporarily used
+#    n_train_sub_ls = []
+#    subset_ls = []
+#    r_ls = []  # list of correlation coefficients
+    
+#    ii=0 #temporarily used
 
     for n_train_sub in n_train_subs:
         # number of training subsets in full training set with n_train_sub individuals each
@@ -338,7 +342,7 @@ def get_corr_ldpred(variant_set, maf, h2, pi, use_1kg_eur_hm3_snps, chrom,
         for subset in range(n_subsets)[:3]:
             if p_and_t:
                 
-                p_value_thresholds = [1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2]
+                p_value_thresholds = [1e-9, 1e-8, 5e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2] #, 
                 p_value_thresholds = ['{:.4e}'.format(p) for p in p_value_thresholds]
                 
                 print(f'\n#############\nStarting P+T for n_train_sub={n_train_sub} (subset {subset+1} of {n_subsets})\nthresholds: {p_value_thresholds}\n#############')
@@ -363,11 +367,11 @@ def get_corr_ldpred(variant_set, maf, h2, pi, use_1kg_eur_hm3_snps, chrom,
                     r = test1.aggregate_cols(hl.agg.corr(test1.sim_y, test1.prs))
                     print(
                         f'\n#############\nP+T (threshold={p_value})\nr for subset {subset+1} of {n_subsets} (n_train_sub={n_train_sub}): {r}\nr2 for subset {subset+1} of {n_subsets}: {r**2}\n#############')
-                    if ii==0:
-                        ii+=1
-                        test1=test1.annotate_cols(prs_alt = hl.agg.sum(test1.dosage*test1.adj_beta_flipped))
-                        r_alt = test1.aggregate_cols(hl.agg.corr(test1.sim_y, test1.prs_alt))
-                        print(f'\n#############\nP+T ALT r for subset {subset+1} of {n_subsets} (n_train_sub={n_train_sub}): {r_alt}\nALT r2 for subset {subset+1} of {n_subsets}: {r_alt**2}\n#############')
+#                    if ii<10:
+#                        ii+=1
+#                        test1=test1.annotate_cols(prs_alt = hl.agg.sum(test1.dosage*test1.adj_beta_flipped))
+#                        r_alt = test1.aggregate_cols(hl.agg.corr(test1.sim_y, test1.prs_alt))
+#                        print(f'\n#############\nP+T ALT r for subset {subset+1} of {n_subsets} (n_train_sub={n_train_sub}): {r_alt}\nALT r2 for subset {subset+1} of {n_subsets}: {r_alt**2}\n#############')
             if ldpred_inf:
                 ss_path = wd+f'ldpred/sim.chr22.n_train_{n_train_sub}.subset_{subset}.ldr_333.h2_0.7.tsv.gz'
                 print(f'\n#############\nStarting LDpred-inf for n_train_sub={n_train_sub} (subset {subset+1} of {n_subsets})\nss path: {ss_path}\n#############')
@@ -386,7 +390,14 @@ def get_corr_ldpred(variant_set, maf, h2, pi, use_1kg_eur_hm3_snps, chrom,
                 r = test1.aggregate_cols(hl.agg.corr(test1.sim_y, test1.prs))
                 print(
                     f'\n#############\nLDpred-inf r for subset {subset+1} of {n_subsets} (n_train_sub={n_train_sub}): {r}\nr2 for subset {subset+1} of {n_subsets}: {r**2}\n#############')
-
+    
+#    df = pd.DataFrame(data=list(zip(n_train_sub_ls, subset_ls, [n_test]*len(n_train_sub_ls), r_ls)),
+#                      columns=['n_train', 'subset_id', 'n_test', 'r'])
+#    print(df)
+#
+#    hl.Table.from_pandas(df).export(
+#        wd+f'prs_cs/corr.{variant_set}.maf_{maf}.h2_{h2}.pi_{pi}{".1kg_eur_hm3" if use_1kg_eur_hm3_snps else ""}.phi_{phi}.v2.tsv')
+    
 if __name__ == '__main__':
 
     variant_set = 'qc_pos'
@@ -394,9 +405,9 @@ if __name__ == '__main__':
     # whether to subset to the intersection of SNPs in the EUR 1KG SNPs suggested by PRScs
     use_1kg_eur_hm3_snps = True
     h2 = 0.75
-    pi = 0.001
+    pi = 1
 #    chrom=22 #use only chromosome 22. default: chrom=all (use all chromosomes)
-    chrom='all'
+    chrom='22'
 #    exact_h2 = True
 
     # if modules contains a digit related to an modules, that module will be run
