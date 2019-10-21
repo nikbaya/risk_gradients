@@ -257,7 +257,7 @@ print(model.summary())
 print(anova)
 
 fig,ax = plt.subplots(figsize=(1.5*6,1.5*4))
-grouped = pd.DataFrame(data={'inv_n_train':df_tmp.groupby('inv_n_train')['inv_R2'].mean().index,
+grouped = pd.DataFrame(data={'inv_n_train':df_tmp.groupby('inv_n_train')['inv_n_train'].mean().index,
                              'mean_inv_R2':df_tmp.groupby('inv_n_train')['inv_R2'].mean().values,
                              'std_inv_R2': df_tmp.groupby('inv_n_train')['inv_R2'].std().values})
 x_obs = (df_tmp.inv_n_train).values
@@ -304,7 +304,7 @@ print(anova)
 print(model.summary())
 
 fig,ax = plt.subplots(figsize=(1.5*6,1.5*4))
-grouped = pd.DataFrame(data={'inv_n_train':df_chr22.groupby('inv_n_train')['inv_R2'].mean().index,
+grouped = pd.DataFrame(data={'inv_n_train':df_chr22.groupby('inv_n_train')['inv_n_train'].mean().index,
                              'mean_inv_R2':df_chr22.groupby('inv_n_train')['inv_R2'].mean().values,
                              'std_inv_R2': df_chr22.groupby('inv_n_train')['inv_R2'].std().values})
 x_obs = (df_chr22.inv_n_train).values
@@ -371,7 +371,7 @@ print(f'{("Linear" if model_type is "lin" else ("Quadratic" if model_type is "qu
 print(anova)
 #print(model.summary())
 
-grouped = pd.DataFrame(data={'inv_n_train':df.groupby('inv_n_train')['inv_R2'].mean().index,
+grouped = pd.DataFrame(data={'inv_n_train':df.groupby('inv_n_train')['inv_n_train'].mean().index,
                              'mean_inv_R2':df.groupby('inv_n_train')['inv_R2'].mean().values,
                              'std_inv_R2': df.groupby('inv_n_train')['inv_R2'].std().values})
 x_obs = (df.inv_n_train).values
@@ -403,24 +403,106 @@ df = pd.read_csv(f'{local_wd}data/corr.pt.threshold_1.qc_pos.maf_0.05.h2_0.75.pi
 df['inv_n_train'] = 1/df.n_train
 df['inv_R2'] = df.r**(-2)
 
-fig,ax = plt.subplots(figsize=(1.5*6,1.5*4))
+fig,ax = plt.subplots(figsize=(1.2*6,1.2*4))
 plt.plot(df.n_train, df.r**2,'.',ms=10)
 plt.xlabel('# of individuals in training set')
 plt.ylabel('R^2')
-plt.title(f'R^2 between PRS and simulated phenotype\nas a function of training set size (unadjusted betas, chr22)')
-fig.savefig(f'{local_wd}plots/n_train_R2.chr22.unadjusted_betas.png',dpi=300)
+plt.title(f'R^2 between PRS and simulated phenotype\nas a function of training set size (unadjusted betas, chr22, h2=0.75, pi=0.01)')
+fig.savefig(f'{local_wd}plots/n_train_R2.chr22.unadjusted_betas.h2_0.75.pi_0.01.png',dpi=300)
 
 
-grouped = pd.DataFrame(data={'inv_n_train':df.groupby('inv_n_train')['inv_R2'].mean().index,
+
+model_type = 'lin'
+
+if model_type=='lin':
+    model = sm_api.ols(formula = 'inv_R2 ~ 1 + inv_n_train ', data = df).fit()
+elif model_type=='quad':
+    model = sm_api.ols(formula = 'inv_R2 ~ 1 + inv_n_train + I(inv_n_train**2) ', data = df).fit()
+
+anova = anova_lm(model)
+print(f'{("Linear" if model_type is "lin" else ("Quadratic" if model_type is "quad" else "Unspecified"))} model')
+print(anova)
+#print(model.summary())
+
+grouped = pd.DataFrame(data={'inv_n_train':df.groupby('inv_n_train')['inv_n_train'].mean().index,
                              'mean_inv_R2':df.groupby('inv_n_train')['inv_R2'].mean().values,
                              'std_inv_R2': df.groupby('inv_n_train')['inv_R2'].std().values})
-
 x_obs = (df.inv_n_train).values
 y_obs = (df.inv_R2).values
 #p2,p1,p0 = np.polyfit(x_obs,y_obs,2) #save each coefficient as p{deg}
 x = np.linspace(min(x_obs), max(x_obs),20)
-fig,ax = plt.subplots(figsize=(1.5*6,1.5*4))
+y_hat = model.params.inv_n_train*x + model.params.Intercept
+if  'I(inv_n_train ** 2)' in model.params:
+    y_hat += model.params['I(inv_n_train ** 2)']*x**2
+#plt.plot(x_obs,y_obs,'.',ms=10)
+fig,ax = plt.subplots(figsize=(1.2*6,1.2*4))
 plt.errorbar(x=grouped.inv_n_train,y=grouped.mean_inv_R2,yerr=grouped.std_inv_R2*2,
              fmt='.',ms=10)
+plt.plot(x,y_hat,'k--',alpha=0.5)
+plt.title(f'PRS-CS, chr22')
+locs, labels = plt.xticks()
+plt.xticks(locs[::],[str(round(x,10)) for x in locs[::]],rotation=0)
+plt.legend([f'{("Linear" if model_type is "lin" else ("Quadratic" if model_type is "quad" else "Unspecified"))} model',
+               '1/N vs. 1/R^2'],loc='lower right')
 plt.ylabel('1/R^2')
 plt.xlabel('1/N')
+plt.title(f'Inverse R^2 between PRS and simulated phenotype\nas a function of inverse training set size (unadjusted betas, chr22, h2=0.75, pi=0.01)')
+fig.savefig(f'{local_wd}plots/inv_n_train_inv_R2.chr22.unadjusted_betas.h2_0.75.pi_0.01.png',dpi=300)
+
+
+
+# chr22 PRS-CS, h2=0.75, pi=1
+
+df = pd.read_csv(local_wd+'data/corr.qc_pos.maf_0.05.h2_0.75.pi_1.1kg_eur_hm3.phi_1e-04.chrom_22.v2.tsv',
+                 sep='\t')
+
+fig,ax = plt.subplots(figsize=(1.2*6,1.2*4))
+plt.plot(df.n_train, df.r**2,'.',ms=10)
+plt.xlabel('# of individuals in training set')
+plt.ylabel('R^2')
+plt.title(f'R^2 between PRS and simulated phenotype\nas a function of training set size (PRS-CS, chr22, h2=0.75, pi=1)')
+fig.savefig(f'{local_wd}plots/n_train_R2.chr22.prs_cs.phi_1e-04.h2_0.75.pi_1.png',dpi=300)
+
+
+df['inv_n_train'] = 1/df.n_train
+df['inv_R2'] = df.r**(-2)
+
+import statsmodels.formula.api as sm_api
+from statsmodels.stats.anova import anova_lm
+
+model_type = 'lin'
+
+if model_type=='lin':
+    model = sm_api.ols(formula = 'inv_R2 ~ 1 + inv_n_train ', data = df).fit()
+elif model_type=='quad':
+    model = sm_api.ols(formula = 'inv_R2 ~ 1 + inv_n_train + I(inv_n_train**2) ', data = df).fit()
+
+anova = anova_lm(model)
+print(f'{("Linear" if model_type is "lin" else ("Quadratic" if model_type is "quad" else "Unspecified"))} model')
+print(anova)
+#print(model.summary())
+
+grouped = pd.DataFrame(data={'inv_n_train':df.groupby('inv_n_train')['inv_n_train'].mean().index,
+                             'mean_inv_R2':df.groupby('inv_n_train')['inv_R2'].mean().values,
+                             'std_inv_R2': df.groupby('inv_n_train')['inv_R2'].std().values})
+x_obs = (df.inv_n_train).values
+y_obs = (df.inv_R2).values
+#p2,p1,p0 = np.polyfit(x_obs,y_obs,2) #save each coefficient as p{deg}
+x = np.linspace(min(x_obs), max(x_obs),20)
+y_hat = model.params.inv_n_train*x + model.params.Intercept
+if  'I(inv_n_train ** 2)' in model.params:
+    y_hat += model.params['I(inv_n_train ** 2)']*x**2
+#plt.plot(x_obs,y_obs,'.',ms=10)
+fig,ax = plt.subplots(figsize=(1.2*6,1.2*4))
+plt.errorbar(x=grouped.inv_n_train,y=grouped.mean_inv_R2,yerr=grouped.std_inv_R2*2,
+             fmt='.',ms=10)
+plt.plot(x,y_hat,'k--',alpha=0.5)
+plt.title(f'PRS-CS, chr22')
+locs, labels = plt.xticks()
+plt.xticks(locs[::],[str(round(x,10)) for x in locs[::]],rotation=0)
+plt.legend([f'{("Linear" if model_type is "lin" else ("Quadratic" if model_type is "quad" else "Unspecified"))} model',
+               '1/N vs. 1/R^2'],loc='lower right')
+plt.ylabel('1/R^2')
+plt.xlabel('1/N')
+plt.title(f'Inverse R^2 between PRS and simulated phenotype\nas a function of inverse training set size (PRS-CS, chr22, h2=0.75, pi=1)')
+fig.savefig(f'{local_wd}plots/inv_n_train_inv_R2.chr22.prs_cs.phi_1e-04.h2_0.75.pi_1.png',dpi=300)
