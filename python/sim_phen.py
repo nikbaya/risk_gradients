@@ -435,6 +435,7 @@ if __name__ == '__main__':
     pi = 1
 #    chrom=22 #use only chromosome 22. default: chrom=all (use all chromosomes)
     chrom='22'
+    is_pruned = False
 #    exact_h2 = True
     max_reps = 3
 
@@ -524,7 +525,7 @@ if __name__ == '__main__':
     if '6' in modules:
         print(f'\n#############\nCalculate phenotype-PRS correlation using P+T-derived betas (module 6)\n#############')
         get_corr_pt(variant_set=variant_set, maf=maf, h2=h2, pi=pi,
-                    use_1kg_eur_hm3_snps=use_1kg_eur_hm3_snps,is_pruned=False,
+                    use_1kg_eur_hm3_snps=use_1kg_eur_hm3_snps,is_pruned=is_pruned,
                     threshold=1,chrom=chrom,max_reps=max_reps)
 
     # Get correlation between phenotype and LDpred PRS (module 7)

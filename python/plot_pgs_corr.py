@@ -278,6 +278,7 @@ plt.legend([f'{("Linear" if model_type is "lin" else ("Quadratic" if model_type 
                '1/N vs. 1/R^2'],loc='lower right')
 plt.ylabel('1/R^2')
 plt.xlabel('1/N')
+
 fig.savefig(f'{local_wd}plots/inv_n_train_inv_R2.model_{model_type}.{f"prs_cs.phi_{phi}" if "unadjusted" not in phi else f"unadjusted_betas.{phi}"}.png',dpi=600)
 
 

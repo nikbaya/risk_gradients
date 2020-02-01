@@ -159,7 +159,7 @@ def get_mt(phen, variant_set, test_set=0.1, get='both', overwrite=False, seed=No
 def downsample(mt, frac, phen, for_cases=None, seed = None):
     '''
     Downsamples a set of individuals in mt, keeping a fraction of them (frac).
-    Can either downsample all individuals, only cases (for_cases=True), 
+    Can either downsample all individuals (for_cases=None), only cases (for_cases=True), 
     or only controls (for_cases=False).
     '''
     start = dt.datetime.now()
