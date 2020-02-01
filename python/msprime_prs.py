@@ -142,7 +142,7 @@ def sim_ts(args):
 
 
     # initialize lists
-    args, ts_list, ts_list_geno, m_total, m_geno_total, m, \
+    args, ts_list_all, ts_list_geno_all, m_total, m_geno_total, m, \
     m_start, m_geno, m_geno_start, genotyped_list_index = initialise(args)
     
     # load recombination maps
@@ -157,7 +157,8 @@ def sim_ts(args):
     
     # simulate with out-of-Africa model
     print(f'... simulating out-of-Africa model for {args.n} EUR samples ...')
-    sample_size = [0, args.n, 0] #only set EUR sample size to be greater than 0
+    n_total = args.n + args.n_ref
+    sample_size = [0, n_total, 0] #only set EUR sample size to be greater than 0
     pop_configs, migration_mat, demographic_events, Ne, n_pops = out_of_africa(sample_size)
     
     dp = msprime.DemographyDebugger(Ne=args.Ne,
@@ -167,29 +168,29 @@ def sim_ts(args):
     dp.print_history()
     
     for chr in range(args.n_chr):
-        ts_list.append(msprime.simulate(sample_size=sample_size,
-                                        configurations=pop_configs,
-                                        migration_matrix=migration_mat,
-                                        demographic_events=demographic_events,
-                                        recombination_map=rec_map_list[chr],
-                                        length=args.m_per_chr, Ne=Ne, 
-                                        recombination_rate=args.rec, 
-                                        mutation_rate=args.mut))
+        ts_list_all.append(msprime.simulate(sample_size=sample_size,
+                                            configurations=pop_configs,
+                                            migration_matrix=migration_mat,
+                                            demographic_events=demographic_events,
+                                            recombination_map=rec_map_list[chr],
+                                            length=args.m_per_chr, Ne=Ne, 
+                                            recombination_rate=args.rec, 
+                                            mutation_rate=args.mut))
         # assign betas
 #        common_mutations = []
 #        N_haps_chr = ts_list[chr].get_sample_size()
         
         # get mutations > MAF
-        ts_list[chr] = get_common_mutations_ts(args, ts_list[chr])
+        ts_list_all[chr] = get_common_mutations_ts(args, ts_list_all[chr])
         
-        m[chr] = int(ts_list[chr].get_num_mutations())
+        m[chr] = int(ts_list_all[chr].get_num_mutations())
         m_start[chr] = m_total
         m_total += m[chr]
         print(f'Number of mutations above MAF in the generated data: {m[chr]}')
         print('Running total of sites > MAF cutoff: {m_total}')
         
-        ts_list_geno.append(ts_list[chr])
-        genotyped_list_index.append(np.ones(ts_list[chr].num_mutations, dtype=bool))
+        ts_list_geno_all.append(ts_list_all[chr])
+        genotyped_list_index.append(np.ones(ts_list_all[chr].num_mutations, dtype=bool))
         m_geno[chr] = m[chr]
         m_geno_start[chr] = m_start[chr]
         m_geno_total = m_total
@@ -197,7 +198,7 @@ def sim_ts(args):
         print('Running total of sites genotyped: {m_geno_total}')
 
     
-    return ts_list, ts_list_geno, m, m_start, m_total, m_geno, m_geno_start, \
+    return ts_list_all, ts_list_geno_all, m, m_start, m_total, m_geno, m_geno_start, \
            m_geno_total, n_pops, genotyped_list_index
 
 def nextSNP_add(variant, index=None):
@@ -289,23 +290,19 @@ def run_gwas(args, y, ts_list_geno, m_geno_total):
 if __name__ == '__main__':
     args = parser.parse_args()
     
-    n_total = args.n + args.n_ref
-    
     # simulate tree sequences
     start_sim_ts = dt.now()
-    ts_list, ts_list_geno, m, m_start, m_total, m_geno, m_geno_start, \
-    m_geno_total, n_pops, genotyped_list_index  = sim_ts(args, n_total)
+    ts_list_all, ts_list_geno_all, m, m_start, m_total, m_geno, m_geno_start, \
+    m_geno_total, n_pops, genotyped_list_index  = sim_ts(args)
     print(f'sim ts time (min): {round((dt.now()-start_sim_ts).seconds/60, 2)}')
     
     # TODO: Split into ref and non-ref, MAF filter, then take the intersection of SNPs passing MAF filter
-    ts_list_ref = [ts.simplify(samples=ts.samples()[:args.n_ref]) for ts in ts_list] # first args.n_ref samples in tree sequence are ref individuals
-    ts_list_tar = [ts.simplify(samples=ts.samples()[args.n_ref:]) for ts in ts_list] # all but first args.n_ref samples in tree sequence are target individuals
+    ts_list_ref = [ts.simplify(samples=ts.samples()[:args.n_ref]) for ts in ts_list_all] # first args.n_ref samples in tree sequence are ref individuals
+    ts_list = [ts.simplify(samples=ts.samples()[args.n_ref:]) for ts in ts_list_all] # all but first args.n_ref samples in tree sequence are non-ref individuals
 
-    ts_list_geno_ref = [ts.simplify(samples=ts.samples()[:args.n_ref]) for ts in ts_list_geno] # first args.n_ref samples in tree sequence are ref individuals
-    ts_list_geno_tar = [ts.simplify(samples=ts.samples()[args.n_ref:]) for ts in ts_list_geno] # all but first args.n_ref samples in tree sequence are target individuals
-    
-    
-    
+    ts_list_geno_ref = [ts.simplify(samples=ts.samples()[:args.n_ref]) for ts in ts_list_geno_all] # first args.n_ref samples in tree sequence are ref individuals
+    ts_list_geno = [ts.simplify(samples=ts.samples()[args.n_ref:]) for ts in ts_list_geno_all] # all but first args.n_ref samples in tree sequence are non-ref individuals
+        
     # simulate phenotype
     start_sim_phen = dt.now()
     y, beta_A_list = sim_phen(args, n_pops, ts_list, m_total)
