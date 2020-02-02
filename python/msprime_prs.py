@@ -51,7 +51,7 @@ def sim_ts(args):
         genotyped_list_index = []
         m_total, m_geno_total = 0, 0
     
-        m = m_geno = m_start = m_geno_start = np.zeros(args.n_chr).astype(int)
+        m, m_geno, m_start, m_geno_start = [np.zeros(1).astype(int) for x in range(4)] # careful not to point to the same object
     
         return args, ts_list, ts_list_geno, m_total, m_geno_total, m, \
                m_start, m_geno, m_geno_start, genotyped_list_index
@@ -179,7 +179,7 @@ def sim_ts(args):
         
         # get mutations > MAF
         ts_list_all[chr] = get_common_mutations_ts(args, ts_list_all[chr])
-        
+
         m[chr] = int(ts_list_all[chr].get_num_mutations())
         m_start[chr] = m_total
         m_total += m[chr]
@@ -198,71 +198,6 @@ def sim_ts(args):
     return ts_list_all, ts_list_geno_all, m, m_start, m_total, m_geno, m_geno_start, \
            m_geno_total, n_pops, genotyped_list_index
 
-def nextSNP_add(variant, index=None):
-    	if index is None:
-    		var_tmp = np.array(variant.genotypes[0::2].astype(int)) + np.array(variant.genotypes[1::2].astype(int))
-    	else:
-    		var_tmp = np.array(variant.genotypes[0::2][index].astype(int)) + np.array(variant.genotypes[1::2][index].astype(int))
-    
-    	# Additive term.
-    	mean_X = np.mean(var_tmp)
-#    	p = mean_X / 2
-    	# Evaluate the mean and then sd to normalise.
-    	X_A = (var_tmp - mean_X) / np.std(var_tmp)
-    	return X_A
-
-
-def sim_phen(args, n_pops, ts_list, m_total):
-    '''
-    Simulate phenotype under additive model
-    '''
-    def set_mutations_in_tree(tree_sequence, p_causal):
-
-    	tables = tree_sequence.dump_tables()
-    	tables.mutations.clear()
-    	tables.sites.clear()
-    	
-    	causal_bool_index = np.zeros(tree_sequence.num_mutations, dtype=bool)
-    	# Get the causal mutations.
-    	k = 0
-    	for site in tree_sequence.sites():
-    		if np.random.random_sample() < p_causal:
-    			causal_bool_index[k] = True
-    			causal_site_id = tables.sites.add_row(
-    				position=site.position,
-    				ancestral_state=site.ancestral_state)
-    			tables.mutations.add_row(
-    				site=causal_site_id,
-    				node=site.mutations[0].node,
-    				derived_state=site.mutations[0].derived_state)
-    		k = k+1
-    
-    	new_tree_sequence = tables.tree_sequence()
-    	m_causal = new_tree_sequence.num_mutations
-    
-    	return new_tree_sequence, m_causal, causal_bool_index
-    
-    print(f'Additive h2 is {args.h2_A}')
-    
-    n = int(ts_list_geno[chr].get_sample_size()/2 )
-    y = np.zeros(n)
-    beta_A_list = [] # list of np arrays (one for each chromosome) containing true effect sizes
-    
-    for chr in range(args.n_chr):
-        m_chr = int(ts_list[chr].get_num_mutations())
-        print(f'Picking causal variants and determining effect sizes in chromosome {chr+1}')
-        print(f'p-causal is {args.p_causal}')
-        ts_pheno_A, m_causal_A, causal_A_index = set_mutations_in_tree(ts_list[chr], args.p_causal)
-        print(f'Picked {m_causal_A} additive causal variants out of {m_chr}')
-        beta_A = np.random.normal(loc=0, scale=np.sqrt(args.h2_A / (m_total * args.p_causal)), size=m_causal_A)
-        beta_A_list.append(beta_A)
-        
-        # Get the phenotypes.
-        for k, variant in enumerate(ts_pheno_A.variants()): # Note, progress here refers you to tqdm which just creates a pretty progress bar.
-                X_A = nextSNP_add(variant)
-                y += X_A * beta_A[k]
-
-    return y, beta_A_list
 
 def split(args, ts_list_all, ts_list_geno_all):
     def joint_maf_filter(ts_list1, ts_list2, maf=args.maf):
@@ -329,16 +264,96 @@ def split(args, ts_list_all, ts_list_geno_all):
     ts_list_ref = [ts.simplify(samples=ts.samples()[:2*args.n_ref]) for ts in ts_list_all] # first 2*args.n_ref samples in tree sequence are ref individuals
     ts_list = [ts.simplify(samples=ts.samples()[2*args.n_ref:]) for ts in ts_list_all] # all but first 2*args.n_ref samples in tree sequence are non-ref individuals
 
-    ts_list1, ts_list2 = joint_maf_filter(ts_list1=ts_list_ref, ts_list2=ts_list_ref, maf=args.maf)
+    ts_list_ref, ts_list = joint_maf_filter(ts_list1=ts_list_ref, ts_list2=ts_list, maf=args.maf)
     
-    
-#    genotyped_list_index.append(np.ones(ts_list_all[chr].num_mutations, dtype=bool))
+    ts_list_geno = []
+    genotyped_list_index = []
+    m_total = 0
+    m_geno_total = 0
+    for chr in range(args.n_chr):
+        m[chr] = int(ts_list[chr].get_num_mutations())
+        m_start[chr] = m_total
+        m_total += m[chr]
+        print(f'Number of mutations above MAF in the generated data: {m[chr]}')
+        print(f'Running total of sites > MAF cutoff: {m_total}')
+        
+        ts_list_geno.append(ts_list[chr])
+        genotyped_list_index.append(np.ones(ts_list[chr].num_mutations, dtype=bool))
+        m_geno[chr] = m[chr]
+        m_geno_start[chr] = m_start[chr]
+        m_geno_total = m_total
 
-    assert False
+#    genotyped_list_index.append(np.ones(ts_list_all[chr].num_mutations, dtype=bool))
     
-    return ts_list_ref, ts_list, ts_list_geno_ref, ts_list_geno
+    return ts_list_ref, ts_list, ts_list_geno, m, m_start, m_total, m_geno, \
+           m_geno_start, m_geno_total, genotyped_list_index
     
+def nextSNP_add(variant, index=None):
+    	if index is None:
+    		var_tmp = np.array(variant.genotypes[0::2].astype(int)) + np.array(variant.genotypes[1::2].astype(int))
+    	else:
+    		var_tmp = np.array(variant.genotypes[0::2][index].astype(int)) + np.array(variant.genotypes[1::2][index].astype(int))
     
+    	# Additive term.
+    	mean_X = np.mean(var_tmp)
+#    	p = mean_X / 2
+    	# Evaluate the mean and then sd to normalise.
+    	X_A = (var_tmp - mean_X) / np.std(var_tmp)
+    	return X_A
+
+
+def sim_phen(args, n_pops, ts_list, ts_list_geno, m_total):
+    '''
+    Simulate phenotype under additive model
+    '''
+    def set_mutations_in_tree(tree_sequence, p_causal):
+
+    	tables = tree_sequence.dump_tables()
+    	tables.mutations.clear()
+    	tables.sites.clear()
+    	
+    	causal_bool_index = np.zeros(tree_sequence.num_mutations, dtype=bool)
+    	# Get the causal mutations.
+    	k = 0
+    	for site in tree_sequence.sites():
+    		if np.random.random_sample() < p_causal:
+    			causal_bool_index[k] = True
+    			causal_site_id = tables.sites.add_row(
+    				position=site.position,
+    				ancestral_state=site.ancestral_state)
+    			tables.mutations.add_row(
+    				site=causal_site_id,
+    				node=site.mutations[0].node,
+    				derived_state=site.mutations[0].derived_state)
+    		k = k+1
+    
+    	new_tree_sequence = tables.tree_sequence()
+    	m_causal = new_tree_sequence.num_mutations
+    
+    	return new_tree_sequence, m_causal, causal_bool_index
+    
+    print(f'Additive h2 is {args.h2_A}')
+    
+    n = int(ts_list_geno[0].get_sample_size()/2 )
+    y = np.zeros(n)
+    beta_A_list = [] # list of np arrays (one for each chromosome) containing true effect sizes
+    
+    for chr in range(args.n_chr):
+        m_chr = int(ts_list[chr].get_num_mutations())
+        print(f'Picking causal variants and determining effect sizes in chromosome {chr+1}')
+        print(f'p-causal is {args.p_causal}')
+        ts_pheno_A, m_causal_A, causal_A_index = set_mutations_in_tree(ts_list[chr], args.p_causal)
+        print(f'Picked {m_causal_A} additive causal variants out of {m_chr}')
+        beta_A = np.random.normal(loc=0, scale=np.sqrt(args.h2_A / (m_total * args.p_causal)), size=m_causal_A)
+        beta_A_list.append(beta_A)
+        
+        # Get the phenotypes.
+        for k, variant in enumerate(ts_pheno_A.variants()): # Note, progress here refers you to tqdm which just creates a pretty progress bar.
+                X_A = nextSNP_add(variant)
+                y += X_A * beta_A[k]
+
+    return y, beta_A_list
+
 def run_gwas(args, y, ts_list_geno, m_geno_total):
     r'''
     Get GWAS beta-hats
@@ -369,13 +384,14 @@ if __name__ == '__main__':
     m_geno_total, n_pops, genotyped_list_index  = sim_ts(args)
     print(f'sim ts time (min): {round((dt.now()-start_sim_ts).seconds/60, 2)}')
     
-    
     # split into ref and non-ref
-    ts_list_ref, ts_list, ts_list_geno_ref, ts_list_geno = split(args, ts_list_all, ts_list_geno_all)
-        
+    ts_list_ref, ts_list, ts_list_geno, m, m_start, m_total, m_geno, \
+    m_geno_start, m_geno_total, genotyped_list_index = split(args, ts_list_all, ts_list_geno_all)
+    
+
     # simulate phenotype
     start_sim_phen = dt.now()
-    y, beta_A_list = sim_phen(args, n_pops, ts_list, m_total)
+    y, beta_A_list = sim_phen(args, n_pops, ts_list, ts_list_geno, m_total)
     print(f'sim phen time (min): {round((dt.now()-start_sim_phen).seconds/60, 2)}')
 
     # run GWAS
