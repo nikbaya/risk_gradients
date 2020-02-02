@@ -3,7 +3,12 @@
 """
 Created on Sat Feb  1 14:50:37 2020
 
-Runs large-scale simulations for testing PRS-CS
+Runs large-scale simulations for testing PRS-CS. 
+
+To setup VM:
+    conda create -n msprime -y -q python=3.6 numpy=1.18 # create conda environment named msprime and install msprime dependencies
+    conda activate msprime # activate msprime environment
+    conda install -c conda-forge msprime # install msprime Python package
 
 @author: nbaya
 """
@@ -46,9 +51,9 @@ def sim_ts(args):
     Simulate tree sequences using out-of-Africa model
     '''
     def initialise(args):
-        ts_list = []
-        ts_list_geno = []
-        genotyped_list_index = []
+        ts_list = [None for i in range(args.n_chr)]
+        ts_list_geno = [None for i in range(args.n_chr)]
+        genotyped_list_index = [None for i in range(args.n_chr)]
         m_total, m_geno_total = 0, 0
     
         m, m_geno, m_start, m_geno_start = [np.zeros(1).astype(int) for x in range(4)] # careful not to point to the same object
@@ -166,14 +171,14 @@ def sim_ts(args):
     dp.print_history()
     
     for chr in range(args.n_chr):
-        ts_list_all.append(msprime.simulate(sample_size=None, #set to None because sample_size info is stored in pop_configs
+        ts_list_all[chr] = msprime.simulate(sample_size=None, #set to None because sample_size info is stored in pop_configs
                                             population_configurations=pop_configs,
                                             migration_matrix=migration_mat,
                                             demographic_events=demographic_events,
                                             recombination_map=rec_map_list[chr],
                                             length=args.m_per_chr, Ne=Ne, 
                                             recombination_rate=args.rec, 
-                                            mutation_rate=args.mut))
+                                            mutation_rate=args.mut)
         # assign betas
 #        common_mutations = []
 #        N_haps_chr = ts_list[chr].get_sample_size()
@@ -187,8 +192,8 @@ def sim_ts(args):
         print(f'Number of mutations above MAF in the generated data: {m[chr]}')
         print(f'Running total of sites > MAF cutoff: {m_total}')
         
-        ts_list_geno_all.append(ts_list_all[chr])
-        genotyped_list_index.append(np.ones(ts_list_all[chr].num_mutations, dtype=bool))
+        ts_list_geno_all[chr] = ts_list_all[chr]
+        genotyped_list_index[chr] = np.ones(ts_list_all[chr].num_mutations, dtype=bool)
         m_geno[chr] = m[chr]
         m_geno_start[chr] = m_start[chr]
         m_geno_total = m_total
