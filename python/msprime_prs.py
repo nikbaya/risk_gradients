@@ -440,7 +440,7 @@ if __name__ == '__main__':
     for chr in range(args.n_chr):
         beta_A_geno = beta_A_list[chr][geno_index_list[chr]]
         print(len(beta_A_geno))
-        r = np.corrcoef(np.vstack((beta_A_geno, betahat_A_list[chr])))
+        r = np.corrcoef(np.vstack((beta_A_geno, betahat_A_list[chr])))[0,1]
         print(f'correlation between betas: {r}') #subset to variants that were used in the GWAS
 
     # calculate LD matrix
