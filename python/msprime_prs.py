@@ -147,7 +147,8 @@ def sim_ts(args):
         pass
 #        rec_map_list = []
 #        for chr in range(args.n_chr):
-#            rec_map_list.append(msprime.RecombinationMap.read_hapmap(tl.sub_chr(args.rec_map_chr, chr+1)))
+#            fname = args.rec_map_chr.replace('@',str(chr))
+#            rec_map_list.append(msprime.RecombinationMap.read_hapmap())
 #        args.rec, args.m = None, None
     else:
         rec_map_list = [None]*args.n_chr
@@ -314,8 +315,7 @@ def sim_phen(args, n_pops, ts_list, ts_list_geno, m_total):
     	
     	causal_bool_index = np.zeros(tree_sequence.num_mutations, dtype=bool)
     	# Get the causal mutations.
-    	k = 0
-    	for site in tree_sequence.sites():
+    	for k, site in enumerate(tree_sequence.sites()):
     		if np.random.random_sample() < p_causal:
     			causal_bool_index[k] = True
     			causal_site_id = tables.sites.add_row(
@@ -325,7 +325,6 @@ def sim_phen(args, n_pops, ts_list, ts_list_geno, m_total):
     				site=causal_site_id,
     				node=site.mutations[0].node,
     				derived_state=site.mutations[0].derived_state)
-    		k = k+1
     
     	new_tree_sequence = tables.tree_sequence()
     	m_causal = new_tree_sequence.num_mutations
@@ -360,9 +359,8 @@ def run_gwas(args, y, ts_list_geno, m_geno_total):
     '''
     betahat_A_list = [None]*args.n_chr # list of np arrays (one for each chromosome) holding GWAS beta-hats
     
-    # TODO: Check that betas for intercept term are zero because X_A is normalized
+    n = int(ts_list_geno[0].get_sample_size()/2 ) # assume that sample size is same across chromosomes
     for chr in range(args.n_chr):
-            n = int(ts_list_geno[chr].get_sample_size()/2 )
             intercept = np.ones(shape=(1,n)) # vector of intercepts for least sq linear regression
             betahat_A = np.empty(shape=m_geno_total)
             print(f'Determining beta-hats in chromosome {chr+1}')
@@ -374,6 +372,18 @@ def run_gwas(args, y, ts_list_geno, m_geno_total):
             betahat_A_list[chr] = betahat_A
     
     return betahat_A_list
+    
+
+def calc_ld(args, ts_list_ref):
+    r'''
+    Calculate LD for reference panel
+    '''
+    ld_list = []
+    for chr in range(args.n_chr):
+        X = ts_list_ref[chr].genotype_matrix()
+        ld = np.corrcoef(X)
+        ld_list.append(ld)
+    return ld_list
     
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -399,6 +409,8 @@ if __name__ == '__main__':
     betahat_A_list = run_gwas(args, y, ts_list_geno, m_geno_total)
     print(f'run gwas time (min): {round((dt.now()-start_run_gwas).seconds/60, 2)}')    
     
+    # calculate LD matrix
+    ld_list = calc_ld(args, ts_list_ref)
     
 #    ref_dict_ls, vld_dict_ls, sst_dict_ls, ld_blk_ls, blk_size_ls = sim_ts(args)
     
