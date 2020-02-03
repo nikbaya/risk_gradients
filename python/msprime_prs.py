@@ -199,7 +199,7 @@ def sim_ts(args):
            m_geno_start, m_geno_total, n_pops, genotyped_list_index
 
 
-        
+
 def _update_vars(args, ts_list):
     r'''
     update ts_list_geno, genotyped_list_index, m_total, m_geno_total
@@ -219,14 +219,14 @@ def _update_vars(args, ts_list):
         m_geno_start[chr_idx] = m_start[chr_idx]
         m_geno_total = m_total
     return ts_list_geno, genotyped_list_index, m_total, m_geno_total
-    
-def split(args, ts_list_all, ts_list_geno_all):    
+
+def split(args, ts_list_all, ts_list_geno_all):
     r'''
     split into ref and non-ref subsets of the data
     '''
     ts_list_ref = [ts.simplify(samples=ts.samples()[:2*args.n_ref]) for ts in ts_list_all] # first 2*args.n_ref samples in tree sequence are ref individuals
     ts_list = [ts.simplify(samples=ts.samples()[2*args.n_ref:]) for ts in ts_list_all] # all but first 2*args.n_ref samples in tree sequence are non-ref individuals
-    
+
     ts_list_geno, genotyped_list_index, m_total, m_geno_total = _update_vars(args, ts_list) # probably not necessary
 
     return ts_list_ref, ts_list, ts_list_geno, m, m_start, m_total, m_geno, \
@@ -280,7 +280,7 @@ def sim_phen(args, n_pops, ts_list, m_total):
     y = np.zeros(n)
     beta_A_list = [] # list of np arrays (one for each chromosome) containing true effect sizes
     ts_pheno_A_list = [] # list of tree sequences on which phenotypes are calculated (possibly ignoring invariant SNPs?)
-    
+
     for chr_idx in range(args.n_chr):
         m_chr = int(ts_list[chr_idx].get_num_mutations())
         print(f'Picking causal variants and determining effect sizes in chromosome {chr_idx+1}')
@@ -358,8 +358,8 @@ def joint_maf_filter(ts_list1, ts_list2, maf=0.05):
             ts_list2[chr_idx] = tables2.tree_sequence()
 
         return ts_list1, ts_list2
-    
-def run_gwas(args, y, ts_list_geno):
+
+def run_gwas(args, y, ts_list_geno, m_geno_total):
     r'''
     Get GWAS beta-hats
     '''
@@ -406,11 +406,11 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
     def _psi(x, alpha, lam):
         f = -alpha*(math.cosh(x)-1)-lam*(math.exp(x)-x-1)
         return f
-    
+
     def _dpsi(x, alpha, lam):
         f = -alpha*math.sinh(x)-lam*(math.exp(x)-1)
         return f
-    
+
     def _g(x, sd, td, f1, f2):
         if (x >= -sd) and (x <= td):
             f = 1
@@ -418,23 +418,23 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
             f = f1
         elif x < -sd:
             f = f2
-    
+
         return f
-    
+
     def gigrnd(p, a, b):
         # setup -- sample from the two-parameter version gig(lam,omega)
         p = float(p); a = float(a); b = float(b)
         lam = p
         omega = math.sqrt(a*b)
-    
+
         if lam < 0:
             lam = -lam
             swap = True
         else:
             swap = False
-    
+
         alpha = math.sqrt(math.pow(omega,2)+math.pow(lam,2))-lam
-        
+
         # find t
         x = -_psi(1, alpha, lam)
         if (x >= 1/2) and (x <= 2):
@@ -443,7 +443,7 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
             t = math.sqrt(2/(alpha+lam))
         elif x < 1/2:
             t = math.log(4/(alpha+2*lam))
-    
+
         # find s
         x = -_psi(-1, alpha, lam)
         if (x >= 1/2) and (x <= 2):
@@ -452,20 +452,20 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
             s = math.sqrt(4/(alpha*math.cosh(1)+lam))
         elif x < 1/2:
             s = min(1/lam, math.log(1+1/alpha+math.sqrt(1/math.pow(alpha,2)+2/alpha)))
-    
+
         # find auxiliary parameters
         eta = -_psi(t, alpha, lam)
         zeta = -_dpsi(t, alpha, lam)
         theta = -_psi(-s, alpha, lam)
         xi = _dpsi(-s, alpha, lam)
-    
+
         p = 1/xi
         r = 1/zeta
-    
+
         td = t-r*eta
         sd = s-p*theta
         q = td+sd
-    
+
         # random variate generation
         while True:
             U = random.random()
@@ -477,28 +477,28 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
                 rnd = td-r*math.log(V)
             else:
                 rnd = -sd+p*math.log(V)
-    
+
             f1 = math.exp(-eta-zeta*(rnd-t))
             f2 = math.exp(-theta+xi*(rnd+s))
             if W*_g(rnd, sd, td, f1, f2) <= math.exp(_psi(rnd, alpha, lam)):
                 break
-    
+
         # transform back to the three-parameter version gig(p,a,b)
         rnd = math.exp(rnd)*(lam/omega+math.sqrt(1+math.pow(lam,2)/math.pow(omega,2)))
         if swap:
             rnd = 1/rnd
-    
+
         rnd = rnd/math.sqrt(a/b)
         return rnd
 
-    def mcmc(a, b, phi, sst_dict, n, ld_blk, blk_size, n_iter, n_burnin, thin, 
+    def mcmc(a, b, phi, sst_dict, n, ld_blk, blk_size, n_iter, n_burnin, thin,
              chrom, beta_std, seed):
         print('... MCMC ...')
-    
+
         # seed
         if seed != None:
             random.seed(seed)
-    
+
         # derived stats
         beta_mrg = np.array(sst_dict['BETA']).T
         beta_mrg = np.expand_dims(beta_mrg, axis=1)
@@ -507,7 +507,7 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
 #        p = len(sst_dict['SNP'])
         p = len(sst_dict['BETA'])
         n_blk = len(ld_blk)
-    
+
         # initialization
         beta = np.zeros((p,1))
         psi = np.ones((p,1))
@@ -516,17 +516,17 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
             phi = 1.0; phi_updt = True
         else:
             phi_updt = False
-    
+
         beta_est = np.zeros((p,1))
         psi_est = np.zeros((p,1))
         sigma_est = 0.0
         phi_est = 0.0
-    
+
         # MCMC
         for itr in range(1,n_iter+1):
             if itr % 100 == 0:
                 print('--- iter-' + str(itr) + ' ---')
-    
+
             mm = 0; quad = 0.0
             for kk in range(n_blk):
                 if blk_size[kk] == 0:
@@ -539,50 +539,48 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
                     beta[idx_blk] = linalg.solve_triangular(dinvt_chol, beta_tmp, trans='N')
                     quad += np.dot(np.dot(beta[idx_blk].T, dinvt), beta[idx_blk])
                     mm += blk_size[kk]
-    
+
             err = max(n/2.0*(1.0-2.0*sum(beta*beta_mrg)+quad), n/2.0*sum(beta**2/psi))
             sigma = 1.0/random.gamma((n+p)/2.0, 1.0/err)
-    
+
             delta = random.gamma(a+b, 1.0/(psi+phi))
-    
+
             for jj in range(p):
                 psi[jj] = gigrnd(a-0.5, 2.0*delta[jj], n*beta[jj]**2/sigma)
             psi[psi>1] = 1.0
-    
+
             if phi_updt == True:
                 w = random.gamma(1.0, 1.0/(phi+1.0))
                 phi = random.gamma(p*b+0.5, 1.0/(sum(delta)+w))
-    
+
             # posterior
             if (itr>n_burnin) and (itr % thin == 0):
                 beta_est = beta_est + beta/n_pst
                 psi_est = psi_est + psi/n_pst
                 sigma_est = sigma_est + sigma/n_pst
                 phi_est = phi_est + phi/n_pst
-    
+
         # convert standardized beta to per-allele beta
         if beta_std == 'False':
             beta_est /= np.sqrt(2.0*maf*(1.0-maf))
-    
+
 #        # write posterior effect sizes
 #        if phi_updt == True:
 #            eff_file = out_dir + '_pst_eff_a%d_b%.1f_phiauto_chr%d.txt' % (a, b, chrom)
 #        else:
 #            eff_file = out_dir + '_pst_eff_a%d_b%.1f_phi%1.0e_chr%d.txt' % (a, b, phi, chrom)
-#    
+#
 #        with open(eff_file, 'w') as ff:
 #            for snp, bp, a1, a2, beta in zip(sst_dict['SNP'], sst_dict['BP'], sst_dict['A1'], sst_dict['A2'], beta_est):
 #                ff.write('%d\t%s\t%d\t%s\t%s\t%.6e\n' % (chrom, snp, bp, a1, a2, beta))
-    
+
         # print estimated phi
         if phi_updt == True:
             print('... Estimated global shrinkage parameter: %1.2e ...' % phi_est )
-    
-        print('... Done ...')    
+
+        print('... Done ...')
         return beta_est
-    
-#    (a, b, phi, sst_dict, n, ld_blk, blk_size, n_iter, n_burnin, thin, 
-#             chrom, out_dir, beta_std, seed)
+
     a = 1; b = 0.5
     phi = None
     n = args.n
@@ -591,16 +589,16 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
     thin = 5
     beta_std = True
     seed = None
-    
+
     sst_dict_list = [{'BETA':betahat_A_list[chr_idx], 'MAF':maf_A_list[chr_idx]}
                      for chr_idx in range(args.n_chr)]
-    
+
     beta_est_list = []
     for chr_idx in range(args.n_chr):
         sst_dict = sst_dict_list[chr_idx]
         ld_blk = ld_list[chr_idx]
         blk_size = [len(blk) for blk in ld_blk]
-        beta_est_list.append(mcmc(a, b, phi, sst_dict, n, ld_blk, blk_size, 
+        beta_est_list.append(mcmc(a, b, phi, sst_dict, n, ld_blk, blk_size,
                                   n_iter, n_burnin, thin, chr_idx+1, beta_std, seed))
     return beta_est_list
 
@@ -615,9 +613,9 @@ if __name__ == '__main__':
 
     # split into ref and non-ref
     ts_list_ref, ts_list, ts_list_geno, m, m_start, m_total, m_geno, \
-    m_geno_start, m_geno_total, genotyped_list_index = split(args, ts_list_all, 
+    m_geno_start, m_geno_total, genotyped_list_index = split(args, ts_list_all,
                                                              ts_list_geno_all) # maf = -1 removes the MAF filter
-    
+
     # simulate phenotype
     start_sim_phen = dt.now()
     y, beta_A_list, ts_pheno_A_list = sim_phen(args, n_pops, ts_list, m_total)
@@ -625,11 +623,11 @@ if __name__ == '__main__':
 
     # MAF filter ref and non-ref
     start_joint_maf = dt.now()
-    ts_list_ref, ts_list = joint_maf_filter(ts_list1=ts_list_ref, ts_list2=ts_list, 
+    ts_list_ref, ts_list = joint_maf_filter(ts_list1=ts_list_ref, ts_list2=ts_list,
                                             maf=args.maf)
     ts_list_geno, genotyped_list_index, m_total, m_geno_total = _update_vars(args, ts_list)
     print(f'joint maf filter time: {round((dt.now()-start_joint_maf).seconds/60, 2)} min')
-    
+
     geno_index_list = [] # list of lists
     for chr_idx in range(args.n_chr):
         ts_pheno_A = ts_pheno_A_list[chr_idx]
@@ -639,15 +637,14 @@ if __name__ == '__main__':
         geno_index = [k for k, position in enumerate(sites_all) if position in sites_geno]
         geno_index = np.asarray(geno_index)
         geno_index_list.append(geno_index)
-        
+
     # run GWAS (and calculate MAF along the way)
     start_run_gwas = dt.now()
-    betahat_A_list, maf_A_list = run_gwas(args, y, ts_list_geno)
+    betahat_A_list, maf_A_list = run_gwas(args, y, ts_list_geno, m_geno_total)
     print(f'run gwas time: {round((dt.now()-start_run_gwas).seconds/60, 2)} min')
 
     for chr_idx in range(args.n_chr):
         beta_A_geno = beta_A_list[chr_idx][geno_index_list[chr_idx]]
-        print(len(beta_A_geno))
         r = np.corrcoef(np.vstack((beta_A_geno, betahat_A_list[chr_idx])))[0,1]
         print(f'correlation between betas: {r}') #subset to variants that were used in the GWAS
 
@@ -655,13 +652,30 @@ if __name__ == '__main__':
     start_calc_ld = dt.now()
     ld_list = calc_ld(args, ts_list_ref)
     print(f'calc ld time: {round((dt.now()-start_calc_ld).seconds/60, 2)} min')
-    
+
     # run PRS-CS
     start_prs_cs = dt.now()
     beta_est_list = prs_cs(args, betahat_A_list, maf_A_list, ld_list)
     print(f'prs-cs time: {round((dt.now()-start_prs_cs).seconds/60, 2)} min')
-    
+
+    print(beta_est_list[0].shape)
+
     for chr_idx in range(args.n_chr):
-        
+        beta_A_geno = beta_A_list[chr_idx][geno_index_list[chr_idx]]
+        beta_est = np.squeeze(beta_est_list[chr_idx])
+        r = np.corrcoef(np.vstack((beta_A_geno, beta_est)))[0,1]
+        print(f'correlation between betas: {r}') #subset to variants that were used in the GWAS
+
+    n = int(ts_list_geno[0].get_sample_size()/2 )
+    yhat = np.zeros(n)
+    for chr_idx in range(args.n_chr):
+        ts_geno = ts_list_geno[chr_idx]
+        beta_est = np.squeeze(beta_est_list[chr_idx])
+        for k, variant in enumerate(ts_geno.variants()): # Note, progress here refers you to tqdm which just creates a pretty progress bar.
+            X_A = nextSNP_add(variant)
+            yhat += X_A * beta_est[k]
+
+    r = np.corrcoef(np.vstack((y, yhat)))[0,1]
+    print(f'y w/ yhat correlation: {r}')
     
-#    ref_dict_ls, vld_dict_ls, sst_dict_ls, ld_blk_ls, blk_size_ls = sim_ts(args)
+    
