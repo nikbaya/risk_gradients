@@ -8,7 +8,7 @@ Runs large-scale simulations for testing PRS-CS.
 To setup VM:
     conda create -n msprime -y -q python=3.6 numpy=1.18 # create conda environment named msprime and install msprime dependencies
     conda activate msprime # activate msprime environment
-    conda install -c conda-forge msprime # install msprime Python package
+    conda install -c -y conda-forge msprime # install msprime Python package
 
 @author: nbaya
 """
@@ -151,6 +151,7 @@ def sim_ts(args):
         rec_map_list = []
         for chr_idx in range(args.n_chr):
             fname = args.rec_map_chr.replace('@',str(chr_idx+1))
+            # TODO: Truncate genetic map to only use m base pairs
             rec_map_list.append(msprime.RecombinationMap.read_hapmap(fname))
         args.rec, args.m_per_chr = None, None
     else:
@@ -233,46 +234,50 @@ def split(args, ts_list_all, ts_list_geno_all):
            m_geno_start, m_geno_total, genotyped_list_index
 
 def nextSNP_add(variant, index=None):
-	if index is None:
-		var_tmp = np.array(variant.genotypes[0::2].astype(int)) + np.array(variant.genotypes[1::2].astype(int))
-	else:
-		var_tmp = np.array(variant.genotypes[0::2][index].astype(int)) + np.array(variant.genotypes[1::2][index].astype(int))
+    r'''
+    Get normalized genotypes for the given variant. Use `index` to subset to 
+    desired indiviuals
+    '''
+    if index is None:
+        var_tmp = np.array(variant.genotypes[0::2].astype(int)) + np.array(variant.genotypes[1::2].astype(int))
+    else:
+        var_tmp = np.array(variant.genotypes[0::2][index].astype(int)) + np.array(variant.genotypes[1::2][index].astype(int))
 
-	# Additive term.
-	mean_X = np.mean(var_tmp)
-#    	p = mean_X / 2
-	# Evaluate the mean and then sd to normalise.
-	X_A = (var_tmp - mean_X) / np.std(var_tmp)
-	return X_A
+    # Additive term.
+    mean_X = np.mean(var_tmp)
+#        p = mean_X / 2
+    # Evaluate the mean and then sd to normalise.
+    X_A = (var_tmp - mean_X) / np.std(var_tmp)
+    return X_A
 
 
 def sim_phen(args, n_pops, ts_list, m_total):
-    '''
+    r'''
     Simulate phenotype under additive model
     '''
     def set_mutations_in_tree(tree_sequence, p_causal):
 
-    	tables = tree_sequence.dump_tables()
-    	tables.mutations.clear()
-    	tables.sites.clear()
+        tables = tree_sequence.dump_tables()
+        tables.mutations.clear()
+        tables.sites.clear()
 
-    	causal_bool_index = np.zeros(tree_sequence.num_mutations, dtype=bool)
-    	# Get the causal mutations.
-    	for k, site in enumerate(tree_sequence.sites()):
-    		if np.random.random_sample() < p_causal:
-    			causal_bool_index[k] = True
-    			causal_site_id = tables.sites.add_row(
-    				position=site.position,
-    				ancestral_state=site.ancestral_state)
-    			tables.mutations.add_row(
-    				site=causal_site_id,
-    				node=site.mutations[0].node,
-    				derived_state=site.mutations[0].derived_state)
+        causal_bool_index = np.zeros(tree_sequence.num_mutations, dtype=bool)
+        # Get the causal mutations.
+        for k, site in enumerate(tree_sequence.sites()):
+            if np.random.random_sample() < p_causal:
+                causal_bool_index[k] = True
+                causal_site_id = tables.sites.add_row(
+                    position=site.position,
+                    ancestral_state=site.ancestral_state)
+                tables.mutations.add_row(
+                    site=causal_site_id,
+                    node=site.mutations[0].node,
+                    derived_state=site.mutations[0].derived_state)
 
-    	new_tree_sequence = tables.tree_sequence()
-    	m_causal = new_tree_sequence.num_mutations
+        new_tree_sequence = tables.tree_sequence()
+        m_causal = new_tree_sequence.num_mutations
 
-    	return new_tree_sequence, m_causal, causal_bool_index
+        return new_tree_sequence, m_causal, causal_bool_index
 
     print(f'Additive h2 is {args.h2_A}')
 
@@ -287,15 +292,18 @@ def sim_phen(args, n_pops, ts_list, m_total):
         print(f'p-causal is {args.p_causal}')
         ts_pheno_A, m_causal_A, causal_A_index = set_mutations_in_tree(ts_list[chr_idx], args.p_causal)
         print(f'Picked {m_causal_A} additive causal variants out of {m_chr}')
-        beta_A = np.random.normal(loc=0, scale=np.sqrt(args.h2_A / (m_total * args.p_causal)), size=m_causal_A)
+        beta_A = np.random.normal(loc=0, scale=np.sqrt(args.h2_A / (m_chr * args.p_causal)), size=m_causal_A)
         beta_A_list.append(beta_A)
         ts_pheno_A_list.append(ts_pheno_A)
 
-        # Get the phenotypes.
+        # additive model for phenotype
         for k, variant in enumerate(ts_pheno_A.variants()): # Note, progress here refers you to tqdm which just creates a pretty progress bar.
                 X_A = nextSNP_add(variant)
                 y += X_A * beta_A[k]
-
+                
+    # add noise to phenotypes
+    y += np.random.normal(loc=0, scale=np.sqrt(1-(args.h2_A)), size=n)
+    
     return y, beta_A_list, ts_pheno_A_list
 
 def joint_maf_filter(ts_list1, ts_list2, maf=0.05):
