@@ -43,6 +43,9 @@ parser.add_argument('--rec_map_chr', default=None, type=str,
         help='If you want to pass a recombination map, include the filepath here. '
         'The filename should contain the symbol @, msprimesim will replace instances '
         'of @ with chromosome numbers.')
+parser.add_argument('--seed', default=None, type=int,
+        help='Seed for replicability. Must be between 1 and (2^32)-1'
+        '[Default: None].') # random seed is changed for each chromosome when calculating true SNP effects
 parser.add_argument('--verbose', '-v', action='store_true', default=False,
                     help='verbose flag')
 #parser.add_argument('--out', default='msprime_prs', type=str,
@@ -194,7 +197,8 @@ def sim_ts(args):
                                                     recombination_map=rec_map_list[chr_idx],
                                                     length=args.m_per_chr, Ne=Ne,
                                                     recombination_rate=args.rec,
-                                                    mutation_rate=args.mut))
+                                                    mutation_rate=args.mut,
+                                                    random_seed=args.seed))
 
                 #  get mutations w/ MAF>0
                 ts_list_all[chr_idx] = get_common_mutations_ts(ts_list_all[chr_idx], maf=0, args=args) # comment out to run later phenotype simulation with causal SNPs not genotyped
@@ -304,7 +308,9 @@ def sim_phen(args, n_pops, ts_list, m_total):
         beta_A_list = [] # list of np arrays (one for each chromosome) containing true effect sizes
         ts_pheno_A_list = [] # list of tree sequences on which phenotypes are calculated (possibly ignoring invariant SNPs?)
         causal_A_idx_list = [] # list of booleans indicating if a SNP is causal
-
+        
+        np.random.seed(args.seed) # set random seed
+        
         for chr_idx in range(args.n_chr):
                 ts = ts_list[chr_idx]
                 ts = get_common_mutations_ts(ts, maf=0, args=args)
@@ -641,7 +647,7 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
         n_burnin = 500
         thin = 5
         beta_std = True
-        seed = None
+        seed = args.seed
 
         sst_dict_list = [{'BETA':betahat_A_list[chr_idx], 'MAF':maf_A_list[chr_idx]}
                                          for chr_idx in range(args.n_chr)]
@@ -728,14 +734,6 @@ if __name__ == '__main__':
                   causal_idx_list=causal_idx_list, 
                   beta_est_list=betahat_A_list, 
                   ts_list_geno=ts_list_geno)
-#        for chr_idx in range(args.n_chr):
-#                causal_idx_phen = causal_idx_pheno_list[chr_idx]
-#                causal_idx = causal_idx_list[chr_idx]
-#                beta_A_pheno = np.zeros(shape=len(betahat_A_list[chr_idx]))
-#                beta_A_pheno[causal_idx] = beta_A_list[chr_idx][causal_idx_phen]
-##               beta_A_geno = beta_A_list[chr_idx][geno_index_list[chr_idx]]
-#                r = np.corrcoef(np.vstack((beta_A_pheno, betahat_A_list[chr_idx])))[0,1]
-#                to_log(args=args, string=f'correlation between betas: {r}') #subset to variants that were used in the GWAS
 
         # calculate LD matrix
         start_calc_ld = dt.now()
@@ -758,24 +756,6 @@ if __name__ == '__main__':
                   causal_idx_list=causal_idx_list, 
                   beta_est_list=beta_est_list, 
                   ts_list_geno=ts_list_geno)
+
+        to_log(args=args, string=f'total time (min): {round((dt.now()-start_sim_ts).seconds/60, 2)}')
         
-#        for chr_idx in range(args.n_chr):
-#                causal_idx_phen = causal_idx_pheno_list[chr_idx]
-#                causal_idx = causal_idx_list[chr_idx]
-#                beta_A_pheno = np.zeros(shape=len(betahat_A_list[chr_idx]))
-#                beta_A_pheno[causal_idx] = beta_A_list[chr_idx][causal_idx_phen]
-#                beta_est = np.squeeze(beta_est_list[chr_idx])
-#                r = np.corrcoef(np.vstack((beta_A_pheno, beta_est)))[0,1]
-#                to_log(args=args, string=f'correlation between betas: {r}') #subset to variants that were used in the GWAS
-#
-#        n = int(ts_list_geno[0].get_sample_size()/2 )
-#        yhat = np.zeros(n)
-#        for chr_idx in range(args.n_chr):
-#                ts_geno = ts_list_geno[chr_idx]
-#                beta_est = np.squeeze(beta_est_list[chr_idx])
-#                for k, variant in enumerate(ts_geno.variants()): # Note, progress here refers you to tqdm which just creates a pretty progress bar.
-#                        X_A = nextSNP_add(variant)
-#                        yhat += X_A * beta_est[k]
-#
-#        r = np.corrcoef(np.vstack((y, yhat)))[0,1]
-#        to_log(args=args, string=f'y w/ yhat correlation: {r}')
