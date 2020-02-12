@@ -424,6 +424,7 @@ def calc_corr(args, causal_idx_pheno_list, causal_idx_list, beta_est_list, ts_li
                 causal_idx = causal_idx_list[chr_idx]
                 beta_est = np.squeeze(beta_est_list[chr_idx])
                 beta_A_pheno = np.zeros(shape=len(beta_est))
+                # TODO: Fix edge case when causal_idx or causal_idx_phen is an empty list
                 beta_A_pheno[causal_idx] = beta_A_list[chr_idx][causal_idx_phen]
                 r = np.corrcoef(np.vstack((beta_A_pheno, beta_est)))[0,1]
                 to_log(args=args, string=f'correlation between betas: {r}') #subset to variants that were used in the GWAS
@@ -576,8 +577,8 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
 
                 # MCMC
                 for itr in range(1,n_iter+1):
-                        if itr % 100 == 0:
-                                to_log(args=args, string='--- iter-' + str(itr) + ' ---')
+#                        if itr % 100 == 0:
+#                                to_log(args=args, string='--- iter-' + str(itr) + ' ---')
 
                         mm = 0; quad = 0.0
                         for kk in range(n_blk):
@@ -627,10 +628,10 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
 #                                ff.write('%d\t%s\t%d\t%s\t%s\t%.6e\n' % (chrom, snp, bp, a1, a2, beta))
 
                 # print estimated phi
-                if phi_updt == True:
-                        to_log(args=args, string='... Estimated global shrinkage parameter: %1.2e ...' % phi_est )
+#                if phi_updt == True:
+#                        to_log(args=args, string='... Estimated global shrinkage parameter: %1.2e ...' % phi_est )
 
-                to_log(args=args, string='... Done ...')
+#                to_log(args=args, string='... Done ...')
                 return beta_est
 
         a = 1; b = 0.5
@@ -690,7 +691,7 @@ if __name__ == '__main__':
                                                 maf=args.maf)
         ts_list_geno, genotyped_list_index, m_total, m_geno_total = _update_vars(args=args, 
                                                                                  ts_list=ts_list) # update only for discovery cohort
-        to_log(args=args, string=f'> post maf filter variant ct: {m_total}')
+        to_log(args=args, string=f'\tpost maf filter variant ct: {m_total}')
         to_log(args=args, string=f'joint maf filter time: {round((dt.now()-start_joint_maf).seconds/60, 2)} min')
 
         causal_idx_pheno_list = [] # get indices of causal variants in MAF filtered dataset; type=list of lists
