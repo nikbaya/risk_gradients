@@ -181,20 +181,20 @@ def sim_ts(args):
         pop_configs, migration_mat, demographic_events, Ne, n_pops = out_of_africa(sample_size)
 
         dp = msprime.DemographyDebugger(Ne=Ne,
-                                                                        population_configurations=pop_configs,
-                                                                        migration_matrix=migration_mat,
-                                                                        demographic_events=demographic_events)
+                                        population_configurations=pop_configs,
+                                        migration_matrix=migration_mat,
+                                        demographic_events=demographic_events)
         dp.print_history()
 
         for chr_idx in range(args.n_chr):
                 ts_list_all.append(msprime.simulate(sample_size=None, #set to None because sample_size info is stored in pop_configs
-                                                                                        population_configurations=pop_configs,
-                                                                                        migration_matrix=migration_mat,
-                                                                                        demographic_events=demographic_events,
-                                                                                        recombination_map=rec_map_list[chr_idx],
-                                                                                        length=args.m_per_chr, Ne=Ne,
-                                                                                        recombination_rate=args.rec,
-                                                                                        mutation_rate=args.mut))
+                                                    population_configurations=pop_configs,
+                                                    migration_matrix=migration_mat,
+                                                    demographic_events=demographic_events,
+                                                    recombination_map=rec_map_list[chr_idx],
+                                                    length=args.m_per_chr, Ne=Ne,
+                                                    recombination_rate=args.rec,
+                                                    mutation_rate=args.mut))
 
                 #  get mutations w/ MAF>0
                 ts_list_all[chr_idx] = get_common_mutations_ts(ts_list_all[chr_idx], maf=0, args=args) # comment out to run later phenotype simulation with causal SNPs not genotyped
@@ -545,7 +545,7 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
 
         def mcmc(a, b, phi, sst_dict, n, ld_blk, blk_size, n_iter, n_burnin, thin,
                  chrom, beta_std, seed, args):
-                to_log(args=args, string='... MCMC ...')
+                to_log(args=args, string=f'... MCMC (chr{chrom})...')
 
                 # seed
                 if seed != None:
@@ -650,9 +650,10 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
                 sst_dict = sst_dict_list[chr_idx]
                 ld_blk = ld_list[chr_idx]
                 blk_size = [len(blk) for blk in ld_blk]
-                beta_est_list.append(mcmc(a, b, phi, sst_dict, n, ld_blk, blk_size,
-                                          n_iter, n_burnin, thin, chr_idx+1, 
-                                          beta_std, seed, args=args))
+                beta_est = mcmc(a, b, phi, sst_dict, n, ld_blk, blk_size,
+                                  n_iter, n_burnin, thin, chr_idx+1, 
+                                  beta_std, seed, args=args)
+                beta_est_list.append(beta_est)
         return beta_est_list
 
 if __name__ == '__main__':
