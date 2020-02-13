@@ -6,7 +6,7 @@ Created on Sat Feb      1 14:50:37 2020
 Runs large-scale simulations for testing PRS-CS.
 
 To setup VM:
-        conda create -n msprime -y -q python=3.6 numpy=1.18 # create conda environment named msprime and install msprime dependencies
+        conda create -n msprime -y -q python=3.6 numpy=1.18.1 scipy=1.4.1 # create conda environment named msprime and install msprime dependencies
         conda activate msprime # activate msprime environment
         conda install -c -y conda-forge msprime # install msprime Python package
 
@@ -487,9 +487,10 @@ def calc_corr(args, causal_idx_pheno_list, causal_idx_list, beta_est_list,
         for chr_idx in range(args.n_chr):
                 causal_idx_phen = causal_idx_pheno_list[chr_idx]
                 causal_idx = causal_idx_list[chr_idx]
+                if len(causal_idx_phen)==0 or len(causal_idx_phen)==0:
+                        break
                 beta_est = np.squeeze(beta_est_list[chr_idx])
                 beta_A_pheno = np.zeros(shape=len(beta_est))
-                # TODO: Fix edge case when causal_idx or causal_idx_phen is an empty list
                 beta_A_pheno[causal_idx] = beta_A_list[chr_idx][causal_idx_phen]
                 r = np.corrcoef(np.vstack((beta_A_pheno, beta_est)))[0,1]
                 to_log(args=args, string=f'correlation between betas: {r}') #subset to variants that were used in the GWAS
