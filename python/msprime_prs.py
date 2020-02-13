@@ -20,32 +20,33 @@ from scipy import linalg, random, stats
 import math
 import msprime
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--n', default=10000, type=int,
-        help='Number of individuals in the sampled genotypes [Default: 10,000].')
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument('--n_gwas', default=10000, type=int,
+        help='Number of individuals in the discovery GWAS.')
+parser.add_argument('--n_test', default=2000, type=int,
+        help='Number of individuals in the holdout set for testing PRS.')
 parser.add_argument('--n_ref', default=1000, type=int,
-        help='Number of individuals in reference panel [Default: 1,000].')
+        help='Number of individuals in reference panel.')
 parser.add_argument('--m_per_chr', default=1000000, type=int,
-        help='Length of the region for each chromosome [Default: 1,000,000].')
+        help='Length of the region for each chromosome.')
 parser.add_argument('--n_chr', default=1, type=int,
-        help='Number of chromosomes [Default: 1].')
+        help='Number of chromosomes.')
 parser.add_argument('--maf', default=0.05, type=float,
-        help='The minor allele frequency cut-off [Default: 0.05].')
+        help='The minor allele frequency cut-off.')
 parser.add_argument('--rec', default=2e-8, type=float,
-        help='Recombination rate across the region [Default: 2e-8].')
+        help='Recombination rate across the region.')
 parser.add_argument('--mut', default=2e-8, type=float,
-        help='Mutation rate across the region [Default: 2e-8].')
+        help='Mutation rate across the region.')
 parser.add_argument('--h2_A', default=0.3, type=float,
-        help='Additive heritability contribution [Default: 0.3].')
+        help='Additive heritability contribution.')
 parser.add_argument('--p_causal', default=1, type=float,
-        help='Proportion of SNPs that are causal [Default: 1].')
+        help='Proportion of SNPs that are causal.')
 parser.add_argument('--rec_map_chr', default=None, type=str,
         help='If you want to pass a recombination map, include the filepath here. '
         'The filename should contain the symbol @, msprimesim will replace instances '
         'of @ with chromosome numbers.')
 parser.add_argument('--seed', default=None, type=int,
-        help='Seed for replicability. Must be between 1 and (2^32)-1'
-        '[Default: None].') # random seed is changed for each chromosome when calculating true SNP effects
+        help='Seed for replicability. Must be between 1 and (2^32)-1') # random seed is changed for each chromosome when calculating true SNP effects
 parser.add_argument('--verbose', '-v', action='store_true', default=False,
                     help='verbose flag')
 #parser.add_argument('--out', default='msprime_prs', type=str,
@@ -56,7 +57,9 @@ def to_log(args, string):
     Prints string and sends it to the log file
     '''
     if args is not None:
-        logfile = f'n_{args.n}.nref_{args.n_ref}.mperchr_{args.m_per_chr}.nchr_{args.n_chr}.h2_{args.h2_A}.pcausal_{args.p_causal}.log'
+        logfile =  f'ngwas_{args.n_gwas}.ntest_{args.n_test}.nref_{args.n_ref}.'
+        logfile += f'mperchr_{args.m_per_chr}.nchr_{args.n_chr}.h2_{args.h2_A}.'
+        logfile += f'pcausal_{args.p_causal}.seed_{args.seed}.log'
         if args.verbose:
             print(string)
     else:
@@ -179,15 +182,15 @@ def sim_ts(args):
                 rec_map_list = [None for x in range(args.n_chr)]
 
         # simulate with out-of-Africa model
-        n_total = args.n + args.n_ref
-        sample_size = [0, n_total, 0] #only set EUR sample size to be greater than 0
+        n_total = args.n_gwas + args.n_test + args.n_ref 
+        sample_size = [0, n_total, 0] #only set EUR (2nd element in list) sample size to be greater than 0
         pop_configs, migration_mat, demographic_events, Ne, n_pops = out_of_africa(sample_size)
 
-        dp = msprime.DemographyDebugger(Ne=Ne,
-                                        population_configurations=pop_configs,
-                                        migration_matrix=migration_mat,
-                                        demographic_events=demographic_events)
-        dp.print_history()
+#        dp = msprime.DemographyDebugger(Ne=Ne,
+#                                        population_configurations=pop_configs,
+#                                        migration_matrix=migration_mat,
+#                                        demographic_events=demographic_events)
+#        dp.print_history()
 
         for chr_idx in range(args.n_chr):
                 ts_list_all.append(msprime.simulate(sample_size=None, #set to None because sample_size info is stored in pop_configs
@@ -243,17 +246,15 @@ def _update_vars(args, ts_list):
                 m_geno_total = m_total
         return ts_list_geno, genotyped_list_index, m_total, m_geno_total
 
-def split(args, ts_list_all, ts_list_geno_all):
+def split(ts_list_both, n1):
         r'''
-        split into ref and non-ref subsets of the data
+        split `ts_list_both` into two, with the first half containing the first 
+        `n1` samples. 
         '''
-        ts_list_ref = [ts.simplify(samples=ts.samples()[:2*args.n_ref]) for ts in ts_list_all] # first 2*args.n_ref samples in tree sequence are ref individuals
-        ts_list = [ts.simplify(samples=ts.samples()[2*args.n_ref:]) for ts in ts_list_all] # all but first 2*args.n_ref samples in tree sequence are non-ref individuals
+        ts_list1 = [ts.simplify(samples=ts.samples()[:2*n1]) for ts in ts_list_both] # first 2*args.n_ref samples in tree sequence are ref individuals
+        ts_list2 = [ts.simplify(samples=ts.samples()[2*n1:]) for ts in ts_list_both] # all but first 2*args.n_ref samples in tree sequence are non-ref individuals
 
-        ts_list_geno, genotyped_list_index, m_total, m_geno_total = _update_vars(args, ts_list) # probably not necessary
-
-        return ts_list_ref, ts_list, ts_list_geno, m, m_start, m_total, m_geno, \
-                   m_geno_start, m_geno_total, genotyped_list_index
+        return ts_list1, ts_list2
 
 def nextSNP_add(variant, index=None):
         r'''
@@ -335,67 +336,124 @@ def sim_phen(args, n_pops, ts_list, m_total):
         return y, beta_A_list, ts_pheno_A_list, causal_A_idx_list
 
 def joint_maf_filter(ts_list1, ts_list2, maf=0.05, logfile=None):
-                r'''
-                Filter to SNPs with MAF>`maf` in both `ts_list1` and `ts_list2`
-                '''
-                for chr_idx in range(args.n_chr):
-                        ts1 = ts_list1[chr_idx]
-                        ts2 = ts_list2[chr_idx]
+        r'''
+        Filter to SNPs with MAF>`maf` in both `ts_list1` and `ts_list2`
+        '''
+        for chr_idx in range(args.n_chr):
+                ts1 = ts_list1[chr_idx]
+                ts2 = ts_list2[chr_idx]
 
-                        n_haps1 = ts1.get_sample_size()
-                        n_haps2 = ts2.get_sample_size()
-                        to_log(args=args, string=f'Determining sites > MAF cutoff {args.maf}')
+                n_haps1 = ts1.get_sample_size()
+                n_haps2 = ts2.get_sample_size()
+                to_log(args=args, string=f'Determining sites > MAF cutoff {args.maf}')
 
-                        tables1 = ts1.dump_tables()
-                        tables1.mutations.clear()
-                        tables1.sites.clear()
+                tables1 = ts1.dump_tables()
+                tables1.mutations.clear()
+                tables1.sites.clear()
 
-                        tables2 = ts2.dump_tables()
-                        tables2.mutations.clear()
-                        tables2.sites.clear()
+                tables2 = ts2.dump_tables()
+                tables2.mutations.clear()
+                tables2.sites.clear()
 
-                        ts1_list = []
-                        for tree in ts1.trees():
-                                for site in tree.sites():
-                                        f = tree.get_num_leaves(site.mutations[0].node) / n_haps1 # allele frequency
-                                        if f > args.maf and f < 1-args.maf:
-                                                ts1_list.append(site)
+                ts1_list = []
+                for tree in ts1.trees():
+                        for site in tree.sites():
+                                f = tree.get_num_leaves(site.mutations[0].node) / n_haps1 # allele frequency
+                                if f > args.maf and f < 1-args.maf:
+                                        ts1_list.append(site)
 #
-                        ts2_list = []
-                        for tree in ts2.trees():
+                ts2_list = []
+                for tree in ts2.trees():
+                        for site in tree.sites():
+                                f = tree.get_num_leaves(site.mutations[0].node) / n_haps2 # allele frequency
+                                if f > args.maf and f < 1-args.maf:
+                                        ts2_list.append(site)
+                                        
+                both_list = [] # list of sites common in both tree sequences
+                for site1 in ts1_list:
+                        for site2 in ts2_list:
+                                if site2.position > site1.position: # speed up that assumes positions are ordered from small to large
+                                        break
+                                if site1.position==site2.position and site1.ancestral_state==site2.ancestral_state:
+                                        both_list.append((site1, site2))
+
+                for site1, site2 in both_list:
+                        common_site_id1 = tables1.sites.add_row(
+                                position=site1.position,
+                                ancestral_state=site1.ancestral_state)
+                        tables1.mutations.add_row(
+                                site=common_site_id1,
+                                node=site1.mutations[0].node,
+                                derived_state=site1.mutations[0].derived_state)
+                        common_site_id2 = tables2.sites.add_row(
+                                position=site2.position,
+                                ancestral_state=site2.ancestral_state)
+                        tables2.mutations.add_row(
+                                site=common_site_id2,
+                                node=site2.mutations[0].node,
+                                derived_state=site2.mutations[0].derived_state)
+                ts_list1[chr_idx] = tables1.tree_sequence()
+                ts_list2[chr_idx] = tables2.tree_sequence()
+
+        return ts_list1, ts_list2
+    
+def test_joint_maf_filter(*ts_lists, args, maf=0.05, logfile=None):
+        r'''
+        Filter to SNPs with MAF>`maf` in all tree sequence lists passed
+        by the `ts_lists`
+        '''              
+        to_log(args=args, string=f'Determining sites with MAF > {args.maf} for {len(ts_lists)} sets of samples')
+        for chr_idx in range(args.n_chr):
+                ts_dict = {'n_haps': [None for x in range(len(ts_lists))], # dictionary with values = lists (list of lists for sites, positions), each list for a different set of samples
+                           'tables': [None for x in range(len(ts_lists))],
+                           'sites': [None for x in range(len(ts_lists))],
+                           'site_ids': [None for x in range(len(ts_lists))]} 
+                    
+                for idx, ts_list in enumerate(ts_lists):
+                        ts = ts_list[chr_idx]
+                        
+                        n_haps = ts.get_sample_size()
+                        
+                        tables = ts.dump_tables()
+                        tables.mutations.clear()
+                        tables.sites.clear()
+                        
+                        sites = []
+                        for tree in ts.trees():
                                 for site in tree.sites():
-                                        f = tree.get_num_leaves(site.mutations[0].node) / n_haps2 # allele frequency
+                                        f = tree.get_num_leaves(site.mutations[0].node) / n_haps # allele frequency
                                         if f > args.maf and f < 1-args.maf:
-                                                ts2_list.append(site)
-                        both_list = [] # list of sites common in both tree sequences
-                        for site1 in ts1_list:
-                                for site2 in ts2_list:
-                                        if site2.position > site1.position: # speed up that assumes positions are ordered from small to large
-                                                break
-                                        if site1.position==site2.position and site1.ancestral_state==site2.ancestral_state:
-                                                both_list.append((site1, site2))
+                                                sites.append(site)
+                        site_ids = [(site.position, site.ancestral_state) for site in sites]
+                        
+                        ts_dict['n_haps'][idx] = n_haps
+                        ts_dict['tables'][idx] = tables
+                        ts_dict['sites'][idx] = sites
+                        ts_dict['site_ids'][idx] = site_ids
+                                        
+                shared_site_ids = set(ts_dict['site_ids'][0]).intersection(*ts_dict['site_ids'][1:])
+                
+                ts_dict['sites'] = [[site for site in ts_dict['sites'][idx] \
+                                    if (site.position,site.ancestral_state) in shared_site_ids]
+                                    for idx,_ in enumerate(ts_lists)]
+                
+                for idx, _ in enumerate(ts_lists):
+                        tables = ts_dict['tables'][idx]
+                        
+                        for site in ts_dict['sites'][idx]:
+                                shared_site = tables.sites.add_row(
+                                        position=site.position,
+                                        ancestral_state=site.ancestral_state)
+                                tables.mutations.add_row(
+                                        site=shared_site,
+                                        node=site.mutations[0].node,
+                                        derived_state=site.mutations[0].derived_state)
+                                
+                        ts_lists[idx][chr_idx] = tables.tree_sequence()
 
-                        for site1, site2 in both_list:
-                                common_site_id1 = tables1.sites.add_row(
-                                        position=site1.position,
-                                        ancestral_state=site1.ancestral_state)
-                                tables1.mutations.add_row(
-                                        site=common_site_id1,
-                                        node=site1.mutations[0].node,
-                                        derived_state=site1.mutations[0].derived_state)
-                                common_site_id2 = tables2.sites.add_row(
-                                        position=site2.position,
-                                        ancestral_state=site2.ancestral_state)
-                                tables2.mutations.add_row(
-                                        site=common_site_id2,
-                                        node=site2.mutations[0].node,
-                                        derived_state=site2.mutations[0].derived_state)
-                        ts_list1[chr_idx] = tables1.tree_sequence()
-                        ts_list2[chr_idx] = tables2.tree_sequence()
+        return ts_lists
 
-                return ts_list1, ts_list2
-
-def run_gwas(args, y, ts_list_geno, m_geno_total):
+def run_gwas(args, y, ts_list_gwas):
         r'''
         Get GWAS beta-hats
         '''
@@ -403,16 +461,16 @@ def run_gwas(args, y, ts_list_geno, m_geno_total):
         maf_A_list = [None for i in range(args.n_chr)] # list of np arrays (one for each chromosome) holding GWAS MAF
 #        pval_A_list = [None]*args.n_chr # list of np arrays (one for each chromosome) holding GWAS pvals
 
-        n = int(ts_list_geno[0].get_sample_size()/2 ) # assume that sample size is same across chromosomes
+        n_gwas = int(ts_list_gwas[0].get_sample_size()/2 ) # assume that sample size is same across chromosomes
         for chr_idx in range(args.n_chr):
-                m_gwas = ts_list_geno[chr_idx].get_num_mutations()
+                m_gwas = ts_list_gwas[chr_idx].get_num_mutations()
                 betahat_A = np.empty(shape=m_gwas)
                 maf_A = np.empty(shape=m_gwas)
 #                pval_A = np.empty(shape=m_geno_total)
                 to_log(args=args, string=f'Determining beta-hats in chromosome {chr_idx+1}')
-                for k, variant in enumerate(ts_list_geno[chr_idx].variants()):
+                for k, variant in enumerate(ts_list_gwas[chr_idx].variants()):
                                 X_A = nextSNP_add(variant, index=None)
-                                betahat, _, _, pval, _ = stats.linregress(x=X_A, y=y.reshape(n,))
+                                betahat, _, _, pval, _ = stats.linregress(x=X_A, y=y.reshape(n_gwas,))
                                 betahat_A[k] = betahat
                                 af = variant.genotypes.astype(int).mean()
                                 maf = min(af, 1-af)
@@ -424,7 +482,8 @@ def run_gwas(args, y, ts_list_geno, m_geno_total):
 
         return betahat_A_list, maf_A_list
     
-def calc_corr(args, causal_idx_pheno_list, causal_idx_list, beta_est_list, ts_list_geno):
+def calc_corr(args, causal_idx_pheno_list, causal_idx_list, beta_est_list, 
+              y_test, ts_list_test):
         for chr_idx in range(args.n_chr):
                 causal_idx_phen = causal_idx_pheno_list[chr_idx]
                 causal_idx = causal_idx_list[chr_idx]
@@ -435,16 +494,16 @@ def calc_corr(args, causal_idx_pheno_list, causal_idx_list, beta_est_list, ts_li
                 r = np.corrcoef(np.vstack((beta_A_pheno, beta_est)))[0,1]
                 to_log(args=args, string=f'correlation between betas: {r}') #subset to variants that were used in the GWAS
     
-        n = int(ts_list_geno[0].get_sample_size()/2 )
+        n = int(ts_list_test[0].get_sample_size()/2 )
         yhat = np.zeros(n)
         for chr_idx in range(args.n_chr):
-                ts_geno = ts_list_geno[chr_idx]
+                ts_geno = ts_list_test[chr_idx]
                 beta_est = np.squeeze(beta_est_list[chr_idx])
                 for k, variant in enumerate(ts_geno.variants()): # Note, progress here refers you to tqdm which just creates a pretty progress bar.
                         X_A = nextSNP_add(variant)
                         yhat += X_A * beta_est[k]
     
-        r = np.corrcoef(np.vstack((y, yhat)))[0,1]
+        r = np.corrcoef(np.vstack((y_test, yhat)))[0,1]
         to_log(args=args, string=f'y w/ yhat correlation: {r}')
 
 def calc_ld(args, ts_list_ref):
@@ -642,7 +701,7 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
 
         a = 1; b = 0.5
         phi = None
-        n = args.n
+        n = args.n_gwas
         n_iter = 1000
         n_burnin = 500
         thin = 5
@@ -667,79 +726,90 @@ if __name__ == '__main__':
         args = parser.parse_args()
                         
         to_log(args=args, string=args)
+        
+        # TODO: Consider adding argument for genotype proportion
 
         # simulate tree sequences
         start_sim_ts = dt.now()
         args, ts_list_all, ts_list_geno_all, m, m_start, m_total, m_geno, m_geno_start, \
         m_geno_total, n_pops, genotyped_list_index = sim_ts(args=args)
-        to_log(args=args, string=f'sim ts time (min): {round((dt.now()-start_sim_ts).seconds/60, 2)}')
+        to_log(args=args, string=f'sim ts time (min): {round((dt.now()-start_sim_ts).seconds/60, 2)}\n')
 
-        # split into ref and non-ref
-        ts_list_ref, ts_list, ts_list_geno, m, m_start, m_total, m_geno, m_geno_start, \
-        m_geno_total, genotyped_list_index = split(args=args, 
-                                                   ts_list_all=ts_list_all, 
-                                                   ts_list_geno_all=ts_list_geno_all) # maf = -1 removes the MAF filter
+        # split into ref and non-ref (non-ref will have both the gwas and test sets)
+        ts_list_ref, ts_list_nonref = split(ts_list_both=ts_list_all, 
+                                            n1=args.n_ref)
 
         # simulate phenotype
         start_sim_phen = dt.now()
-        ts_list0 = ts_list.copy()
         y, beta_A_list, ts_pheno_A_list, causal_A_idx_list = sim_phen(args=args, 
                                                                       n_pops=n_pops, 
-                                                                      ts_list=ts_list, 
+                                                                      ts_list=ts_list_nonref, 
                                                                       m_total=m_total)
-        # TODO: Check that individuals are in the same order in ts_pheno_A_list and ts_list
-        to_log(args=args, string=f'sim phen time: {round((dt.now()-start_sim_phen).seconds/60, 2)} min')
+        # TODO: Check that individuals are in the same order in ts_pheno_A_list and ts_list_nonref
+        to_log(args=args, string=f'sim phen time: {round((dt.now()-start_sim_phen).seconds/60, 2)} min\n')
+        
+        # split non-ref into gwas and test sets
+        ts_list_gwas, ts_list_test = split(ts_list_both=ts_list_nonref, 
+                                           n1=args.n_gwas) 
 
-        # MAF filter ref and non-ref
+        # MAF filter ref, gwas, and test cohorts
+        # TODO: remove necessity of passing args to this function to get n_chr
         start_joint_maf = dt.now()
-        ts_list_ref, ts_list = joint_maf_filter(ts_list1=ts_list_ref, 
-                                                ts_list2=ts_list, 
-                                                maf=args.maf)
-        ts_list_geno, genotyped_list_index, m_total, m_geno_total = _update_vars(args=args, 
-                                                                                 ts_list=ts_list) # update only for discovery cohort
+        ts_list_ref, ts_list_gwas, ts_list_test = test_joint_maf_filter(ts_list_ref, 
+                                                                   ts_list_gwas,
+                                                                   ts_list_test,
+                                                                   args=args,
+                                                                   maf=args.maf)
+        # TODO: update _update_vars to remove extraneous code
+        _, genotyped_list_index, m_total, m_geno_total = _update_vars(args=args, 
+                                                                      ts_list=ts_list_gwas) # update only for discovery cohort
         to_log(args=args, string=f'\tpost maf filter variant ct: {m_total}')
-        to_log(args=args, string=f'joint maf filter time: {round((dt.now()-start_joint_maf).seconds/60, 2)} min')
+        to_log(args=args, string=f'joint maf filter time: {round((dt.now()-start_joint_maf).seconds/60, 2)} min\n')
 
         causal_idx_pheno_list = [] # get indices of causal variants in MAF filtered dataset; type=list of lists
         for chr_idx in range(args.n_chr):
                 ts_causal = ts_pheno_A_list[chr_idx]
-                ts_geno = ts_list_geno[chr_idx]
+                ts_test = ts_list_test[chr_idx]
                 sites_causal = [site.position for tree in ts_causal.trees() for site in tree.sites()] # all sites with MAF>0
-                sites_geno = [site.position for tree in ts_geno.trees() for site in tree.sites()]
-                geno_index = [k for k, position in enumerate(sites_causal) if position in sites_geno]
+                sites_test = [site.position for tree in ts_test.trees() for site in tree.sites()]
+                geno_index = [k for k, position in enumerate(sites_causal) if position in sites_test]
                 geno_index = np.asarray(geno_index)
                 causal_idx_pheno_list.append(geno_index)
 
         causal_idx_list = [] # get indices of causal variants in MAF filtered dataset; type=list of lists
         for chr_idx in range(args.n_chr):
                 ts_causal = ts_pheno_A_list[chr_idx]
-                ts_geno = ts_list_geno[chr_idx]
+                ts_test = ts_list_test[chr_idx]
                 sites_causal = [site.position for tree in ts_causal.trees() for site in tree.sites()] # all sites with MAF>0
-                sites_geno = [site.position for tree in ts_geno.trees() for site in tree.sites()]
-                geno_index = [k for k, position in enumerate(sites_geno) if position in sites_causal]
+                sites_test = [site.position for tree in ts_test.trees() for site in tree.sites()]
+                geno_index = [k for k, position in enumerate(sites_test) if position in sites_causal]
                 geno_index = np.asarray(geno_index)
                 causal_idx_list.append(geno_index)
 
         # run GWAS (and calculate MAF along the way)
+        # TODO: Make sure that y_gwas corresponds to the right individuals
         start_run_gwas = dt.now()
+        assert y.shape[0] == args.n_gwas+args.n_test
+        y_gwas = y[:args.n_gwas] # take first n_gwas individuals, just like in the splitting of ts_list_nonref
+        y_test = y[args.n_gwas:] # take the complement of the first n_gwas individuals, just like in the splitting of ts_list_nonref
         betahat_A_list, maf_A_list = run_gwas(args=args, 
-                                              y=y, 
-                                              ts_list_geno=ts_list_geno, 
-                                              m_geno_total=m_geno_total)
-        to_log(args=args, string=f'run gwas time: {round((dt.now()-start_run_gwas).seconds/60, 2)} min')
+                                              y=y_gwas, 
+                                              ts_list_gwas=ts_list_gwas)
+        to_log(args=args, string=f'run gwas time: {round((dt.now()-start_run_gwas).seconds/60, 2)} min\n')
 
         # calculate beta/betahat and y/yhat correlations
         calc_corr(args=args, 
                   causal_idx_pheno_list=causal_idx_pheno_list, 
                   causal_idx_list=causal_idx_list, 
-                  beta_est_list=betahat_A_list, 
-                  ts_list_geno=ts_list_geno)
+                  beta_est_list=betahat_A_list,
+                  y_test=y_test,
+                  ts_list_test=ts_list_test)
 
         # calculate LD matrix
         start_calc_ld = dt.now()
         ld_list = calc_ld(args=args,
                           ts_list_ref=ts_list_ref)
-        to_log(args=args, string=f'calc ld time: {round((dt.now()-start_calc_ld).seconds/60, 2)} min')
+        to_log(args=args, string=f'calc ld time: {round((dt.now()-start_calc_ld).seconds/60, 2)} min\n')
 
         # run PRS-CS
         start_prs_cs = dt.now()
@@ -747,7 +817,7 @@ if __name__ == '__main__':
                                betahat_A_list=betahat_A_list, 
                                maf_A_list=maf_A_list, 
                                ld_list=ld_list)
-        to_log(args=args, string=f'prs-cs time: {round((dt.now()-start_prs_cs).seconds/60, 2)} min')
+        to_log(args=args, string=f'prs-cs time: {round((dt.now()-start_prs_cs).seconds/60, 2)} min\n')
 
 
         # calculate beta/betahat and y/yhat correlations
@@ -755,7 +825,8 @@ if __name__ == '__main__':
                   causal_idx_pheno_list=causal_idx_pheno_list, 
                   causal_idx_list=causal_idx_list, 
                   beta_est_list=beta_est_list, 
-                  ts_list_geno=ts_list_geno)
+                  y_test=y_test,
+                  ts_list_test=ts_list_test)
 
         to_log(args=args, string=f'total time (min): {round((dt.now()-start_sim_ts).seconds/60, 2)}')
         
