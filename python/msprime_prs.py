@@ -55,22 +55,22 @@ parser.add_argument('--verbose', '-v', action='store_true', default=False,
 #                help='Output filename prefix.')
 
 def to_log(args, string):
-    r'''
-    Prints string and sends it to the log file
-    '''
-    if args is not None:
-        logfile =  f'ngwas_{args.n_gwas}.ntest_{args.n_test}.nref_{args.n_ref}.'
-        logfile += f'mperchr_{args.m_per_chr}.nchr_{args.n_chr}.h2_{args.h2_A}.'
-        logfile += f'pcausal_{args.p_causal}.seed_{args.seed}.log'
-        if args.verbose:
-            print(string)
-    else:
-        logfile = None
-    if type(string) is not str:
-        string = str(string)
-    if logfile is not None:
-        with open(logfile, 'a') as log:
-            log.write(string+'\n')
+        r'''
+        Prints string and sends it to the log file
+        '''
+        if args is not None:
+                logfile =  f'ngwas_{args.n_gwas}.ntest_{args.n_test}.nref_{args.n_ref}.'
+                logfile += f'mperchr_{args.m_per_chr}.nchr_{args.n_chr}.h2_{args.h2_A}.'
+                logfile += f'pcausal_{args.p_causal}.seed_{args.seed}.log'
+                if args.verbose:
+                        print(string)
+        else:
+                logfile = None
+        if type(string) is not str:
+                string = str(string)
+        if logfile is not None:
+                with open(logfile, 'a') as log:
+                        log.write(string+'\n')
 
 def get_common_mutations_ts(tree_sequence, maf=0.05, args=None):
 #                common_sites = msprime.SiteTable()
@@ -195,6 +195,7 @@ def sim_ts(args):
 #        dp.print_history()
 
         for chr_idx in range(args.n_chr):
+                random_seed = (args.seed+chr_idx) % 2**32 if args.seed is not None else args.seed
                 ts_list_all.append(msprime.simulate(sample_size=None, #set to None because sample_size info is stored in pop_configs
                                                     population_configurations=pop_configs,
                                                     migration_matrix=migration_mat,
@@ -203,7 +204,7 @@ def sim_ts(args):
                                                     length=args.m_per_chr, Ne=Ne,
                                                     recombination_rate=args.rec,
                                                     mutation_rate=args.mut,
-                                                    random_seed=(args.seed+chr_idx) % 2**32))
+                                                    random_seed=random_seed))
 
                 #  get mutations w/ MAF>0
                 ts_list_all[chr_idx] = get_common_mutations_ts(ts_list_all[chr_idx], maf=0, args=args) # comment out to run later phenotype simulation with causal SNPs not genotyped
@@ -305,25 +306,26 @@ def sim_phen(args, n_pops, ts_list, m_total):
                 return new_tree_sequence, m_causal, causal_bool_index
 
         to_log(args=args, string=f'Additive h2 is {args.h2_A}')
+        to_log(args=args, string=f'p-causal is {args.p_causal}')
 
         n = int(ts_list[0].get_sample_size()/2 )
         y = np.zeros(n)
         beta_A_list = [] # list of np arrays (one for each chromosome) containing true effect sizes
         ts_pheno_A_list = [] # list of tree sequences on which phenotypes are calculated (possibly ignoring invariant SNPs?)
         causal_A_idx_list = [] # list of booleans indicating if a SNP is causal
-        
+
         np.random.seed(args.seed) # set random seed
-        
+
         m_total = sum([int(ts.get_num_mutations()) for ts in ts_list])
-        
+
         for chr_idx in range(args.n_chr):
                 ts = ts_list[chr_idx]
                 ts = get_common_mutations_ts(ts, maf=0, args=args)
-                to_log(args=args, string=f'picking causal variants and determining effect sizes in chromosome {chr_idx+1}')
-                to_log(args=args, string=f'p-causal is {args.p_causal}')
+                # to_log(args=args, string=f'picking causal variants and determining effect sizes in chromosome {chr_idx+1}')
+                # to_log(args=args, string=f'p-causal is {args.p_causal}')
                 ts_pheno_A, m_causal_A, causal_A_idx = set_mutations_in_tree(ts, args.p_causal)
                 m_chr = int(ts.get_num_mutations())
-                to_log(args=args, string=f'picked {m_causal_A} additive causal variants out of {m_chr}')
+                to_log(args=args, string=f'chr {chr_idx+1} causal: {m_causal_A}/{m_chr}')
                 beta_A = np.random.normal(loc=0, scale=np.sqrt(args.h2_A / (m_total * args.p_causal)), size=m_causal_A)
                 beta_A_list.append(beta_A)
                 ts_pheno_A_list.append(ts_pheno_A)
@@ -334,6 +336,10 @@ def sim_phen(args, n_pops, ts_list, m_total):
                                 X_A = nextSNP_add(variant)
                                 y += X_A * beta_A[k]
 
+        to_log(args=args, string=f'\tm_total: {m_total}')
+        m_causal_total = sum([sum(causal_A_idx) for causal_A_idx in causal_A_idx_list])
+        to_log(args=args, string=f'\tm_causal_total: {m_causal_total}')
+        
         # add noise to phenotypes
     
         if args.exact_h2:
