@@ -41,6 +41,8 @@ parser.add_argument('--h2_A', default=0.3, type=float,
         help='Additive heritability contribution.')
 parser.add_argument('--p_causal', default=1, type=float,
         help='Proportion of SNPs that are causal.')
+parser.add_argument('--exact_h2', default=False, action='store_true',
+        help='Will set simulated phenotype to have almost exactly the right h2')
 parser.add_argument('--rec_map_chr', default=None, type=str,
         help='If you want to pass a recombination map, include the filepath here. '
         'The filename should contain the symbol @, msprimesim will replace instances '
@@ -76,7 +78,7 @@ def get_common_mutations_ts(tree_sequence, maf=0.05, args=None):
 
         # Get the mutations > MAF.
         n_haps = tree_sequence.get_sample_size()
-        to_log(args=args, string=f'Determining sites w/ MAF>{maf}')
+        to_log(args=args, string=f'filtering to SNPs w/ MAF>{maf}')
 
         tables = tree_sequence.dump_tables()
         tables.mutations.clear()
@@ -201,7 +203,7 @@ def sim_ts(args):
                                                     length=args.m_per_chr, Ne=Ne,
                                                     recombination_rate=args.rec,
                                                     mutation_rate=args.mut,
-                                                    random_seed=args.seed))
+                                                    random_seed=(args.seed+chr_idx) % 2**32))
 
                 #  get mutations w/ MAF>0
                 ts_list_all[chr_idx] = get_common_mutations_ts(ts_list_all[chr_idx], maf=0, args=args) # comment out to run later phenotype simulation with causal SNPs not genotyped
@@ -209,8 +211,8 @@ def sim_ts(args):
                 m[chr_idx] = int(ts_list_all[chr_idx].get_num_mutations())
                 m_start[chr_idx] = m_total
                 m_total += m[chr_idx]
-                to_log(args=args, string=f'Number of mutations in chr {chr_idx+1}: {m[chr_idx]}')
-                to_log(args=args, string=f'Running total of sites : {m_total}')
+                to_log(args=args, string=f'number of mutations in chr {chr_idx+1}: {m[chr_idx]}')
+                to_log(args=args, string=f'running total of sites : {m_total}')
 
                 ts_list_geno_all.append(ts_list_all[chr_idx])
                 genotyped_list_index.append(np.ones(ts_list_all[chr_idx].num_mutations, dtype=bool))
@@ -312,15 +314,17 @@ def sim_phen(args, n_pops, ts_list, m_total):
         
         np.random.seed(args.seed) # set random seed
         
+        m_total = sum([int(ts.get_num_mutations()) for ts in ts_list])
+        
         for chr_idx in range(args.n_chr):
                 ts = ts_list[chr_idx]
                 ts = get_common_mutations_ts(ts, maf=0, args=args)
-                m_chr = int(ts.get_num_mutations())
-                to_log(args=args, string=f'Picking causal variants and determining effect sizes in chromosome {chr_idx+1}')
+                to_log(args=args, string=f'picking causal variants and determining effect sizes in chromosome {chr_idx+1}')
                 to_log(args=args, string=f'p-causal is {args.p_causal}')
                 ts_pheno_A, m_causal_A, causal_A_idx = set_mutations_in_tree(ts, args.p_causal)
-                to_log(args=args, string=f'Picked {m_causal_A} additive causal variants out of {m_chr}')
-                beta_A = np.random.normal(loc=0, scale=np.sqrt(args.h2_A / (m_chr * args.p_causal)), size=m_causal_A)
+                m_chr = int(ts.get_num_mutations())
+                to_log(args=args, string=f'picked {m_causal_A} additive causal variants out of {m_chr}')
+                beta_A = np.random.normal(loc=0, scale=np.sqrt(args.h2_A / (m_total * args.p_causal)), size=m_causal_A)
                 beta_A_list.append(beta_A)
                 ts_pheno_A_list.append(ts_pheno_A)
                 causal_A_idx_list.append(causal_A_idx)
@@ -331,78 +335,30 @@ def sim_phen(args, n_pops, ts_list, m_total):
                                 y += X_A * beta_A[k]
 
         # add noise to phenotypes
-        y += np.random.normal(loc=0, scale=np.sqrt(1-(args.h2_A)), size=n)
+    
+        if args.exact_h2:
+            y -= np.mean(y)
+            y /= np.std(y)
+            y *= args.h2_A**(1/2)
+
+            noise = np.random.normal(loc=0, scale=np.sqrt(1-(args.h2_A)), size=n)
+            noise -= np.mean(noise)
+            noise /= np.std(noise)
+            noise *= (1-args.h2_A)**(1/2)
+            
+            y += noise
+        else:
+            y += np.random.normal(loc=0, scale=np.sqrt(1-(args.h2_A)), size=n)
 
         return y, beta_A_list, ts_pheno_A_list, causal_A_idx_list
 
-def joint_maf_filter(ts_list1, ts_list2, maf=0.05, logfile=None):
-        r'''
-        Filter to SNPs with MAF>`maf` in both `ts_list1` and `ts_list2`
-        '''
-        for chr_idx in range(args.n_chr):
-                ts1 = ts_list1[chr_idx]
-                ts2 = ts_list2[chr_idx]
-
-                n_haps1 = ts1.get_sample_size()
-                n_haps2 = ts2.get_sample_size()
-                to_log(args=args, string=f'Determining sites > MAF cutoff {args.maf}')
-
-                tables1 = ts1.dump_tables()
-                tables1.mutations.clear()
-                tables1.sites.clear()
-
-                tables2 = ts2.dump_tables()
-                tables2.mutations.clear()
-                tables2.sites.clear()
-
-                ts1_list = []
-                for tree in ts1.trees():
-                        for site in tree.sites():
-                                f = tree.get_num_leaves(site.mutations[0].node) / n_haps1 # allele frequency
-                                if f > args.maf and f < 1-args.maf:
-                                        ts1_list.append(site)
-#
-                ts2_list = []
-                for tree in ts2.trees():
-                        for site in tree.sites():
-                                f = tree.get_num_leaves(site.mutations[0].node) / n_haps2 # allele frequency
-                                if f > args.maf and f < 1-args.maf:
-                                        ts2_list.append(site)
-                                        
-                both_list = [] # list of sites common in both tree sequences
-                for site1 in ts1_list:
-                        for site2 in ts2_list:
-                                if site2.position > site1.position: # speed up that assumes positions are ordered from small to large
-                                        break
-                                if site1.position==site2.position and site1.ancestral_state==site2.ancestral_state:
-                                        both_list.append((site1, site2))
-
-                for site1, site2 in both_list:
-                        common_site_id1 = tables1.sites.add_row(
-                                position=site1.position,
-                                ancestral_state=site1.ancestral_state)
-                        tables1.mutations.add_row(
-                                site=common_site_id1,
-                                node=site1.mutations[0].node,
-                                derived_state=site1.mutations[0].derived_state)
-                        common_site_id2 = tables2.sites.add_row(
-                                position=site2.position,
-                                ancestral_state=site2.ancestral_state)
-                        tables2.mutations.add_row(
-                                site=common_site_id2,
-                                node=site2.mutations[0].node,
-                                derived_state=site2.mutations[0].derived_state)
-                ts_list1[chr_idx] = tables1.tree_sequence()
-                ts_list2[chr_idx] = tables2.tree_sequence()
-
-        return ts_list1, ts_list2
     
-def test_joint_maf_filter(*ts_lists, args, maf=0.05, logfile=None):
+def joint_maf_filter(*ts_lists, args, maf=0.05, logfile=None):
         r'''
         Filter to SNPs with MAF>`maf` in all tree sequence lists passed
         by the `ts_lists`
         '''              
-        to_log(args=args, string=f'Determining sites with MAF > {args.maf} for {len(ts_lists)} sets of samples')
+        to_log(args=args, string=f'filtering to SNPs w/ MAF > {args.maf} for {len(ts_lists)} sets of samples')
         for chr_idx in range(args.n_chr):
                 ts_dict = {'n_haps': [None for x in range(len(ts_lists))], # dictionary with values = lists (list of lists for sites, positions), each list for a different set of samples
                            'tables': [None for x in range(len(ts_lists))],
@@ -452,6 +408,22 @@ def test_joint_maf_filter(*ts_lists, args, maf=0.05, logfile=None):
                         ts_lists[idx][chr_idx] = tables.tree_sequence()
 
         return ts_lists
+    
+    
+def get_shared_var_idxs(ts_list1, ts_list2):
+        r'''
+        Get indices for variants in `ts_list1` that are also in `ts_list2.
+        '''
+        assert len(ts_list1)==len(ts_list2), 'ts_lists do not have the same length'
+        var_idxs_list = []
+        for chr_idx, ts1 in enumerate(ts_list1):
+                ts2 = ts_list2[chr_idx]
+                positions1 = [site.position for tree in ts1.trees() for site in tree.sites()]
+                positions2 = [site.position for tree in ts2.trees() for site in tree.sites()]
+                var_idxs = [k for k, position in enumerate(positions1) if position in positions2]
+                var_idxs = np.asarray(var_idxs)
+                var_idxs_list.append(var_idxs)
+        return var_idxs_list
 
 def run_gwas(args, y, ts_list_gwas):
         r'''
@@ -483,29 +455,40 @@ def run_gwas(args, y, ts_list_gwas):
         return betahat_A_list, maf_A_list
     
 def calc_corr(args, causal_idx_pheno_list, causal_idx_list, beta_est_list, 
-              y_test, ts_list_test):
-        for chr_idx in range(args.n_chr):
-                causal_idx_phen = causal_idx_pheno_list[chr_idx]
-                causal_idx = causal_idx_list[chr_idx]
-                if len(causal_idx_phen)==0 or len(causal_idx_phen)==0:
-                        break
-                beta_est = np.squeeze(beta_est_list[chr_idx])
-                beta_A_pheno = np.zeros(shape=len(beta_est))
-                beta_A_pheno[causal_idx] = beta_A_list[chr_idx][causal_idx_phen]
-                r = np.corrcoef(np.vstack((beta_A_pheno, beta_est)))[0,1]
-                to_log(args=args, string=f'correlation between betas: {r}') #subset to variants that were used in the GWAS
+              y_test, ts_list_test, only_h2_obs=False):
+        if not only_h2_obs:
+                for chr_idx in range(args.n_chr):
+                        causal_idx_pheno = causal_idx_pheno_list[chr_idx]
+                        causal_idx = causal_idx_list[chr_idx]
+                        if len(causal_idx_pheno)==0 or len(causal_idx)==0:
+                                break
+                        beta_est = np.squeeze(beta_est_list[chr_idx])
+                        beta_A_pheno = np.zeros(shape=len(beta_est))
+                        beta_A_pheno[causal_idx] = beta_A_list[chr_idx][causal_idx_pheno]
+                        r = np.corrcoef(np.vstack((beta_A_pheno, beta_est)))[0,1]
+                        to_log(args=args, string=f'correlation between betas: {r}')
     
         n = int(ts_list_test[0].get_sample_size()/2 )
         yhat = np.zeros(n)
         for chr_idx in range(args.n_chr):
                 ts_geno = ts_list_test[chr_idx]
                 beta_est = np.squeeze(beta_est_list[chr_idx])
-                for k, variant in enumerate(ts_geno.variants()): # Note, progress here refers you to tqdm which just creates a pretty progress bar.
+                m_geno = len([x for x in ts_geno.variants()])
+                if len(beta_est) < m_geno:
+                        beta_est0 = beta_est.copy()
+                        causal_idx_pheno = causal_idx_pheno_list[chr_idx]
+                        causal_idx = causal_idx_list[chr_idx]
+                        beta_est = np.zeros(shape=m_geno)
+                        beta_est[causal_idx] = beta_est0[causal_idx_pheno]
+                for k, variant in enumerate(ts_geno.variants()): 
                         X_A = nextSNP_add(variant)
                         yhat += X_A * beta_est[k]
-    
         r = np.corrcoef(np.vstack((y_test, yhat)))[0,1]
-        to_log(args=args, string=f'y w/ yhat correlation: {r}')
+        if only_h2_obs:
+            to_log(args=args, string=f'h2 obs. (y w/ y_gen R^2): {r**2}')
+        else:
+            to_log(args=args, string=f'y w/ yhat correlation: {r}')
+
 
 def calc_ld(args, ts_list_ref):
         r'''
@@ -725,7 +708,8 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
 
 if __name__ == '__main__':
         args = parser.parse_args()
-                        
+        
+        to_log(args=args, string=f'start time: {dt.now().strftime("%d/%m/%Y %H:%M:%S")}')
         to_log(args=args, string=args)
         
         # TODO: Consider adding argument for genotype proportion
@@ -746,6 +730,9 @@ if __name__ == '__main__':
                                                                       n_pops=n_pops, 
                                                                       ts_list=ts_list_nonref, 
                                                                       m_total=m_total)
+        assert y.shape[0] == args.n_gwas+args.n_test
+        y_gwas = y[:args.n_gwas] # take first n_gwas individuals, just like in the splitting of ts_list_nonref
+        y_test = y[args.n_gwas:] # take the complement of the first n_gwas individuals, just like in the splitting of ts_list_nonref
         # TODO: Check that individuals are in the same order in ts_pheno_A_list and ts_list_nonref
         to_log(args=args, string=f'sim phen time: {round((dt.now()-start_sim_phen).seconds/60, 2)} min\n')
         
@@ -756,43 +743,38 @@ if __name__ == '__main__':
         # MAF filter ref, gwas, and test cohorts
         # TODO: remove necessity of passing args to this function to get n_chr
         start_joint_maf = dt.now()
-        ts_list_ref, ts_list_gwas, ts_list_test = test_joint_maf_filter(ts_list_ref, 
+        ts_list_ref, ts_list_gwas, ts_list_test = joint_maf_filter(ts_list_ref, 
                                                                    ts_list_gwas,
                                                                    ts_list_test,
                                                                    args=args,
                                                                    maf=args.maf)
+        # get causal variant indices for the GWAS cohort
+        causal_idx_pheno_gwas_list = get_shared_var_idxs(ts_pheno_A_list, ts_list_nonref)
+        causal_idx_gwas_pheno_list = get_shared_var_idxs(ts_list_nonref, ts_pheno_A_list) 
+                
+        # TODO: calculate observed h2
+        calc_corr(args=args, 
+                  causal_idx_pheno_list=causal_idx_pheno_gwas_list, 
+                  causal_idx_list=causal_idx_gwas_pheno_list,
+                  beta_est_list=beta_A_list,
+                  y_test=y,
+                  ts_list_test=ts_list_nonref,
+                  only_h2_obs=True)
+        
         # TODO: update _update_vars to remove extraneous code
         _, genotyped_list_index, m_total, m_geno_total = _update_vars(args=args, 
                                                                       ts_list=ts_list_gwas) # update only for discovery cohort
         to_log(args=args, string=f'\tpost maf filter variant ct: {m_total}')
         to_log(args=args, string=f'joint maf filter time: {round((dt.now()-start_joint_maf).seconds/60, 2)} min\n')
 
-        causal_idx_pheno_list = [] # get indices of causal variants in MAF filtered dataset; type=list of lists
-        for chr_idx in range(args.n_chr):
-                ts_causal = ts_pheno_A_list[chr_idx]
-                ts_test = ts_list_test[chr_idx]
-                sites_causal = [site.position for tree in ts_causal.trees() for site in tree.sites()] # all sites with MAF>0
-                sites_test = [site.position for tree in ts_test.trees() for site in tree.sites()]
-                geno_index = [k for k, position in enumerate(sites_causal) if position in sites_test]
-                geno_index = np.asarray(geno_index)
-                causal_idx_pheno_list.append(geno_index)
 
-        causal_idx_list = [] # get indices of causal variants in MAF filtered dataset; type=list of lists
-        for chr_idx in range(args.n_chr):
-                ts_causal = ts_pheno_A_list[chr_idx]
-                ts_test = ts_list_test[chr_idx]
-                sites_causal = [site.position for tree in ts_causal.trees() for site in tree.sites()] # all sites with MAF>0
-                sites_test = [site.position for tree in ts_test.trees() for site in tree.sites()]
-                geno_index = [k for k, position in enumerate(sites_test) if position in sites_causal]
-                geno_index = np.asarray(geno_index)
-                causal_idx_list.append(geno_index)
+        # get causal variant indices for the test cohort
+        causal_idx_pheno_list = get_shared_var_idxs(ts_pheno_A_list, ts_list_test)
+        causal_idx_test_list = get_shared_var_idxs(ts_list_test, ts_pheno_A_list)
 
         # run GWAS (and calculate MAF along the way)
         # TODO: Make sure that y_gwas corresponds to the right individuals
         start_run_gwas = dt.now()
-        assert y.shape[0] == args.n_gwas+args.n_test
-        y_gwas = y[:args.n_gwas] # take first n_gwas individuals, just like in the splitting of ts_list_nonref
-        y_test = y[args.n_gwas:] # take the complement of the first n_gwas individuals, just like in the splitting of ts_list_nonref
         betahat_A_list, maf_A_list = run_gwas(args=args, 
                                               y=y_gwas, 
                                               ts_list_gwas=ts_list_gwas)
@@ -801,7 +783,7 @@ if __name__ == '__main__':
         # calculate beta/betahat and y/yhat correlations
         calc_corr(args=args, 
                   causal_idx_pheno_list=causal_idx_pheno_list, 
-                  causal_idx_list=causal_idx_list, 
+                  causal_idx_list=causal_idx_test_list, 
                   beta_est_list=betahat_A_list,
                   y_test=y_test,
                   ts_list_test=ts_list_test)
@@ -824,10 +806,11 @@ if __name__ == '__main__':
         # calculate beta/betahat and y/yhat correlations
         calc_corr(args=args, 
                   causal_idx_pheno_list=causal_idx_pheno_list, 
-                  causal_idx_list=causal_idx_list, 
+                  causal_idx_list=causal_idx_test_list, 
                   beta_est_list=beta_est_list, 
                   y_test=y_test,
                   ts_list_test=ts_list_test)
 
         to_log(args=args, string=f'total time (min): {round((dt.now()-start_sim_ts).seconds/60, 2)}')
         
+
