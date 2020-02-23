@@ -495,6 +495,88 @@ def run_gwas(args, y, ts_list_gwas):
 
         return betahat_A_list, maf_A_list
 
+def write_betahats(args, ts_list, beta_list, betahat_fname):
+        r'''
+        Write beta-hats to file
+        '''
+        with open(betahat_fname,'w') as betahat_file:
+            betahat_file.write('SNP A1 A2 freq b se p N\n')
+            n_haps = ts_list[0].get_sample_size()
+            for chr_idx in range(args.n_chr):
+                    betahat = beta_list[chr_idx]
+                    snp_idx = 0
+                    for tree in ts_list[chr_idx].trees():
+                            for site in tree.sites():
+                                    f = tree.get_num_leaves(site.mutations[0].node) / n_haps
+                                    betahat_file.write(f'{chr_idx+1}:{site.position} {site.ancestral_state} {1} {f} {betahat[snp_idx]} {2} {int(n_haps/2)}\n')
+                                    snp_idx += 1
+
+def write_to_plink(args, ts_list, bfile, betahat_fname):
+        r'''
+        Write ts_list files to bfile and merge across chromosomes if necessary
+        '''
+        mergelist_fname='tmp_mergelist.txt'
+        for chr_idx in range(args.n_chr):
+                vcf_fname = f"tmp_ref.chr{chr_idx+1}.vcf.gz"
+                with gzip.open(vcf_fname , "wt") as vcf_file:
+                        ts_list_ref[chr_idx].write_vcf(vcf_file, ploidy=2, contig_id=f'{chr_idx+1}')
+                if args.n_chr > 1:
+                        chr_bfile_fname = f'tmp_{bfile}.chr{chr_idx+1}'
+                        with open(mergelist_fname,'a') as mergelist_file:
+                                mergelist_file.write(chr_bfile_fname+'\n')
+                elif args.n_chr==1:
+                        chr_bfile_fname = bfile
+                subprocess.call(f'{plink_path} --vcf {vcf_fname } --double-id --silent --make-bed --out {chr_bfile_fname}'.split())
+                tail_popen = subprocess.Popen(f'tail -n +2 {betahat_fname}'.split(), stdout = subprocess.PIPE)
+                awk1_popen = subprocess.Popen(['grep', f'^{chr_idx+1}:*' ], stdin = tail_popen.stdout, stdout = subprocess.PIPE)
+                tmp_betahat_chr_fname = 'tmp_betahat_chr.txt'
+                with open(tmp_betahat_chr_fname, 'wb') as tmp_file:
+                        tmp_file.write(awk1_popen.communicate()[0])
+                # NOTE: This assumes that the GWAS and ref samples have exactly the same SNP positions
+                paste_popen =  subprocess.Popen(f'paste {chr_bfile_fname}.bim {tmp_betahat_chr_fname}'.split(), stdout = subprocess.PIPE)
+                awk2_popen = subprocess.Popen(['awk','{ print $1 "\t" $7 "\t" $3 "\t" $4 "\t" $5 "\t" $6 }'], stdin=paste_popen.stdout, stdout = subprocess.PIPE)
+                with open(f'{chr_bfile_fname}.bim', 'wb') as chr_bim_file:
+                        chr_bim_file.write(awk2_popen.communicate()[0])
+        if args.n_chr>1:
+                subprocess.call(f'{plink_path} --merge-list {mergelist_fname} --make-bed --out {bfile}'.split())
+
+def run_SBayesR(args, gctb_path, bfile):
+        r'''
+        Run SBayesR on `bfile` and convert beta-hats
+        '''
+        subprocess.call(f'{gctb_path} --bfile {bfile} --make-full-ldm --out {bfile}'.split(),
+                        )
+        subprocess.call(f'{gctb_path} --sbayes R --ldm {bfile}.ldm.full \
+                        --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 \
+                        --gwas-summary {betahat_fname} --chain-length 10000 \
+                        --burn-in 2000  --out-freq 10 --out {bfile}'.split(),
+                            )
+
+        to_log(args=args, string='converting SBayesR beta-hats')
+        sbayesr_betahat_list = [[0 for tree in ts_list_ref[chr_idx].trees() for site in tree.sites()] for chr_idx in range(args.n_chr)] # list of lists of beta-hats for each chromosome
+        print(len(sbayesr_betahat_list[0]))
+        with open(f'{bfile}.snpRes','r') as snpRes_file:
+                chr_idx = 0
+                snp_idx = 0
+                chr_positions = [site.position for tree in ts_list_test[chr_idx].trees() for site in tree.sites()]
+                for i, line in enumerate(snpRes_file): # skip first line (header)
+                        if i==0:
+                                continue
+                        vals = line.split()
+			# NOTE: This depends on the snpRes file being sorted by chr and bp position
+                        while int(vals[2]) > chr_idx+1 and chr_idx<args.n_chr: # chrom is 3rd column in snpRes file
+                                chr_idx = int(vals[2])-1
+                                snp_idx = 0
+                                chr_positions = [site.position for tree in ts_list_test[chr_idx].trees() for site in tree.sites()]
+                        while snp_idx < len(chr_positions) and chr_positions[snp_idx] != float(vals[1].split(':')[1]):
+                                snp_idx += 1
+                        if chr_positions[snp_idx] == float(vals[1].split(':')[1]):
+                                sbayesr_betahat_list[chr_idx][snp_idx] = float(vals[10])
+                                snp_idx += 1
+
+        return sbayesr_betahat_list
+
+
 def calc_corr(args, causal_idx_pheno_list, causal_idx_list, beta_est_list,
               y_test, ts_list_test, only_h2_obs=False):
         if not only_h2_obs:
@@ -528,7 +610,7 @@ def calc_corr(args, causal_idx_pheno_list, causal_idx_list, beta_est_list,
         if only_h2_obs:
             to_log(args=args, string=f'h2 obs. (y w/ y_gen R^2): {r**2}')
         else:
-            to_log(args=args, string=f'y w/ yhat correlation: {r}')
+            to_log(args=args, string=f'y w/ yhat r^2: {r**2}')
 
 
 def calc_ld(args, ts_list_ref):
@@ -768,6 +850,16 @@ if __name__ == '__main__':
         ts_list_ref, ts_list_nonref = split(ts_list_both=ts_list_all,
                                             n1=args.n_ref)
 
+
+#######################
+## MAF filter before simulating phenotype
+    #    r'''
+        # maf filter
+        ts_list_ref, ts_list_nonref = joint_maf_filter(ts_list_ref,
+                                                       ts_list_nonref,
+                                                       args=args,
+                                                       maf=args.maf)
+
         # simulate phenotype
         start_sim_phen = dt.now()
         y, beta_A_list, ts_pheno_A_list, causal_A_idx_list = sim_phen(args=args,
@@ -792,6 +884,37 @@ if __name__ == '__main__':
                                                                    ts_list_test,
                                                                    args=args,
                                                                    maf=args.maf)
+   #     '''
+#######################
+## MAF filter after simulating phenotype
+        r'''
+        # simulate phenotype
+        start_sim_phen = dt.now()
+        y, beta_A_list, ts_pheno_A_list, causal_A_idx_list = sim_phen(args=args,
+                                                                      n_pops=n_pops,
+                                                                      ts_list=ts_list_nonref,
+                                                                      m_total=m_total)
+        assert y.shape[0] == args.n_gwas+args.n_test
+        y_gwas = y[:args.n_gwas] # take first n_gwas individuals, just like in the splitting of ts_list_nonref
+        y_test = y[args.n_gwas:] # take the complement of the first n_gwas individuals, just like in the splitting of ts_list_nonref
+        # TODO: Check that individuals are in the same order in ts_pheno_A_list and ts_list_nonref
+        to_log(args=args, string=f'sim phen time: {round((dt.now()-start_sim_phen).seconds/60, 2)}RRRRRRRRRRRRRRRRR min\n')
+
+        # split non-ref into gwas and test sets
+        ts_list_gwas, ts_list_test = split(ts_list_both=ts_list_nonref,
+                                           n1=args.n_gwas)
+
+        # MAF filter ref, gwas, and test cohorts
+        # TODO: remove necessity of passing args to this function to get n_chr
+        start_joint_maf = dt.now()
+        ts_list_ref, ts_list_gwas, ts_list_test = joint_maf_filter(ts_list_ref,
+                                                                   ts_list_gwas,
+                                                                   ts_list_test,
+                                                                   args=args,
+                                                                   maf=args.maf)
+        '''
+#########################
+
         # get causal variant indices for the GWAS cohort
         causal_idx_pheno_gwas_list = get_shared_var_idxs(ts_pheno_A_list, ts_list_nonref)
         causal_idx_gwas_pheno_list = get_shared_var_idxs(ts_list_nonref, ts_pheno_A_list)
@@ -825,67 +948,32 @@ if __name__ == '__main__':
         to_log(args=args, string=f'run gwas time: {round((dt.now()-start_run_gwas).seconds/60, 2)} min\n')
 
         # write beta-hats to file
-        # format: SNP A1 A2 freq b se p N
+        # .ma file format: SNP A1 A2 freq b se p N
         betahat_fname = 'betahat.ma'
-        with open(betahat_fname,'w') as betahat_file:
-                betahat_file.write('SNP A1 A2 freq b se p N\n')
-                n_haps = ts_list_gwas[0].get_sample_size()
-                for chr_idx in range(args.n_chr):
-                        betahat = betahat_A_list[chr_idx]
-                        snp_idx = 0
-#                        np.savetxt(fname='betahat.chr'+str(chr_idx+1)+'.tsv',
-#                                   X=betahat_A_list[chr_idx],
-#                                   fmt='%.3e',
-#                                   delimiter='\t',
-#                                   header='betahat.chr'+str(chr_idx+1))
-                        for tree in ts_list_gwas[chr_idx].trees():
-                                for site in tree.sites():
-                                        f = tree.get_num_leaves(site.mutations[0].node) / n_haps
-                                        betahat_file.write(f'{chr_idx+1}:{site.position} {site.ancestral_state} {1} {f} {betahat[snp_idx]} {2} {int(n_haps/2)}\n')
-                                        snp_idx += 1
+        write_betahats(args=args, ts_list=ts_list_gwas, beta_list=betahat_A_list,
+                       betahat_fname=betahat_fname)
 
-	# For adding suffix to duplicates: https://groups.google.com/forum/#!topic/comp.lang.python/VyzA4ksBj24
+        # For adding suffix to duplicates: https://groups.google.com/forum/#!topic/comp.lang.python/VyzA4ksBj24
 
         # write ref samples to PLINK
-        bfile_fname = 'ref'
-        mergelist_fname='tmp_mergelist.txt'
-        for chr_idx in range(args.n_chr):
-                vcf_fname = f"tmp_ref.chr{chr_idx+1}.vcf.gz"
-                with gzip.open(vcf_fname , "wt") as vcf_file:
-                        ts_list_ref[chr_idx].write_vcf(vcf_file, ploidy=2, contig_id=f'{chr_idx+1}')
-                if args.n_chr > 1:
-                        chr_bfile_fname = f'tmp_{bfile_fname}.chr{chr_idx+1}'
-                        with open(mergelist_fname,'w') as mergelist_file:
-                                mergelist_file.write(chr_bfile_fname+'\n')
-                elif args.n_chr==1:
-                        chr_bfile_fname = bfile_fname
-                subprocess.call(f'{plink_path} --vcf {vcf_fname } --double-id --silent --make-bed --out {chr_bfile_fname}'.split())
-                tail_popen = subprocess.Popen(f'tail -n +2 {betahat_fname}'.split(), stdout = subprocess.PIPE)
-                awk1_popen = subprocess.Popen(['grep', f'^{chr_idx+1}:*' ], stdin = tail_popen.stdout, stdout = subprocess.PIPE)
-                tmp_betahat_chr_fname = 'tmp_betahat_chr.txt'
-                with open(tmp_betahat_chr_fname, 'wb') as tmp_file:
-                        tmp_file.write(awk1_popen.communicate()[0])
-  		# NOTE: This assumes that the GWAS and ref samples have exactly the same SNP positions
-                paste_popen =  subprocess.Popen(f'paste {chr_bfile_fname}.bim {tmp_betahat_chr_fname}'.split(), stdout = subprocess.PIPE)
-                awk2_popen = subprocess.Popen(['awk','{ print $1 "\t" $7 "\t" $3 "\t" $4 "\t" $5 "\t" $6 }'], stdin=paste_popen.stdout, stdout = subprocess.PIPE)
-                with open(f'{chr_bfile_fname}.bim', 'wb') as chr_bim_file:
-                        chr_bim_file.write(awk2_popen.communicate()[0])
-        if args.n_chr>1:
-                subprocess.call(f'{plink_path} --mergelist {mergelist_fname} --make-bed --out {bfile_fname}'.split())
+        bfile = 'ref'
+        write_to_plink(args=args, ts_list=ts_list_ref, bfile=bfile,
+                       betahat_fname=betahat_fname)
 
-        # run gctb
-        subprocess.Popen(f'{gctb_path} --bfile {bfile_fname} --make-full-ldm --out {bfile_fname}'.split(),
-                        stdout=subprocess.PIPE)
-        subprocess.Popen(f'{gctb_path} --sbayes R --ldm {bfile_fname}.ldm.full \
-                        --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 \
-                        --gwas-summary {betahat_fname} --chain-length 10000 \
-                        --burn-in 2000  --out-freq 10 --out {bfile_fname}'.split(),
-                            stdout=subprocess.PIPE)
+        # run gctb and convert betas
+        sbayesr_betahat_list = run_SBayesR(args=args, gctb_path=gctb_path, bfile=bfile)
 
-#        with open(f'{bfile_fname}.snpRes','r') as snpRes_file:
-
+    	# calculate beta/betahat and y/yhat correlations
+        to_log(args=args, string=f'corr for SBayesR (m={m_total})')
+        calc_corr(args=args,
+                  causal_idx_pheno_list=causal_idx_pheno_list,
+                  causal_idx_list=causal_idx_test_list,
+                  beta_est_list=sbayesr_betahat_list,
+                  y_test=y_test,
+                  ts_list_test=ts_list_test)
 
         # calculate beta/betahat and y/yhat correlations
+        to_log(args=args, string=f'corr for GWAS betas (m={m_total})')
         calc_corr(args=args,
                   causal_idx_pheno_list=causal_idx_pheno_list,
                   causal_idx_list=causal_idx_test_list,
@@ -917,4 +1005,3 @@ if __name__ == '__main__':
                   ts_list_test=ts_list_test)
 
         to_log(args=args, string=f'total time (min): {round((dt.now()-start_sim_ts).seconds/60, 2)}')
-
