@@ -8,10 +8,12 @@ Runs large-scale simulations for testing PRS-CS.
 To setup VM:
         conda create -n msprime -y -q python=3.6 numpy=1.18.1 scipy=1.4.1 # create conda environment named msprime and install msprime dependencies
         conda activate msprime # activate msprime environment
-        conda install -c -y conda-forge msprime # install msprime Python package
+        conda install -y -c conda-forge msprime # install msprime Python package
 
 @author: nbaya
 """
+
+# TODO: (Optional) parallelization for loops over chromosomes
 
 import argparse
 from datetime import datetime as dt
