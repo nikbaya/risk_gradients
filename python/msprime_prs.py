@@ -16,11 +16,14 @@ To setup VM:
 # TODO: (Optional) parallelization for loops over chromosomes
 
 import argparse
+from pathlib import Path
 from datetime import datetime as dt
 import numpy as np
 from scipy import linalg, random, stats
 import math
 import msprime
+import gzip
+import subprocess
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--n_gwas', default=10000, type=int,
@@ -73,6 +76,36 @@ def to_log(args, string):
         if logfile is not None:
                 with open(logfile, 'a') as log:
                         log.write(string+'\n')
+
+def get_plink_gctb():
+        r'''
+        Download PLINK and GCTB
+        '''
+        home = str(Path.home())
+        software_dir = home+'/software'
+
+        # download gctb
+        gctb_path = f'{software_dir}/gctb_2.0_Linux/gctb'
+        if not Path(gctb_path).exists():
+                print(f'downloading gctb to {gctb_path}')
+                gctb_wget_url = 'https://cnsgenomics.com/software/gctb/download/gctb_2.0_Linux.zip'
+                try:
+                        subprocess.check_call(f'wget --quiet -nc {gctb_wget_url} -P {software_dir}'.split())
+                        subprocess.check_call(f'unzip -q {software_dir}/gctb_2.0_Linux.zip -d {software_dir}'.split())
+                except subprocess.CalledProcessError:
+                        print(f'gctb download failed')
+
+        # download plink
+        plink_path = f'{software_dir }/plink'
+        if not Path(plink_path).exists():
+                print(f'downloading plink to {plink_path}')
+                plink_wget_url = 'http://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20200219.zip'
+                try:
+                        subprocess.check_call(f'wget --quiet -nc {plink_wget_url} -P {software_dir}'.split())
+                        subprocess.check_call(f'unzip -q {software_dir}/plink_linux_x86_64_20200219.zip -d {software_dir}'.split())
+                except subprocess.CalledProcessError:
+                        print(f'plink download failed')
+        return gctb_path, plink_path
 
 def get_common_mutations_ts(tree_sequence, maf=0.05, args=None):
 #                common_sites = msprime.SiteTable()
@@ -186,7 +219,7 @@ def sim_ts(args):
                 rec_map_list = [None for x in range(args.n_chr)]
 
         # simulate with out-of-Africa model
-        n_total = args.n_gwas + args.n_test + args.n_ref 
+        n_total = args.n_gwas + args.n_test + args.n_ref
         sample_size = [0, n_total, 0] #only set EUR (2nd element in list) sample size to be greater than 0
         pop_configs, migration_mat, demographic_events, Ne, n_pops = out_of_africa(sample_size)
 
@@ -253,8 +286,8 @@ def _update_vars(args, ts_list):
 
 def split(ts_list_both, n1):
         r'''
-        split `ts_list_both` into two, with the first half containing the first 
-        `n1` samples. 
+        split `ts_list_both` into two, with the first half containing the first
+        `n1` samples.
         '''
         ts_list1 = [ts.simplify(samples=ts.samples()[:2*n1]) for ts in ts_list_both] # first 2*args.n_ref samples in tree sequence are ref individuals
         ts_list2 = [ts.simplify(samples=ts.samples()[2*n1:]) for ts in ts_list_both] # all but first 2*args.n_ref samples in tree sequence are non-ref individuals
@@ -341,9 +374,9 @@ def sim_phen(args, n_pops, ts_list, m_total):
         to_log(args=args, string=f'\tm_total: {m_total}')
         m_causal_total = sum([sum(causal_A_idx) for causal_A_idx in causal_A_idx_list])
         to_log(args=args, string=f'\tm_causal_total: {m_causal_total}')
-        
+
         # add noise to phenotypes
-    
+
         if args.exact_h2:
             y -= np.mean(y)
             y /= np.std(y)
@@ -353,35 +386,35 @@ def sim_phen(args, n_pops, ts_list, m_total):
             noise -= np.mean(noise)
             noise /= np.std(noise)
             noise *= (1-args.h2_A)**(1/2)
-            
+
             y += noise
         else:
             y += np.random.normal(loc=0, scale=np.sqrt(1-(args.h2_A)), size=n)
 
         return y, beta_A_list, ts_pheno_A_list, causal_A_idx_list
 
-    
+
 def joint_maf_filter(*ts_lists, args, maf=0.05, logfile=None):
         r'''
         Filter to SNPs with MAF>`maf` in all tree sequence lists passed
         by the `ts_lists`
-        '''              
+        '''
         to_log(args=args, string=f'filtering to SNPs w/ MAF > {args.maf} for {len(ts_lists)} sets of samples')
         for chr_idx in range(args.n_chr):
                 ts_dict = {'n_haps': [None for x in range(len(ts_lists))], # dictionary with values = lists (list of lists for sites, positions), each list for a different set of samples
                            'tables': [None for x in range(len(ts_lists))],
                            'sites': [None for x in range(len(ts_lists))],
-                           'site_ids': [None for x in range(len(ts_lists))]} 
-                    
+                           'site_ids': [None for x in range(len(ts_lists))]}
+
                 for idx, ts_list in enumerate(ts_lists):
                         ts = ts_list[chr_idx]
-                        
+
                         n_haps = ts.get_sample_size()
-                        
+
                         tables = ts.dump_tables()
                         tables.mutations.clear()
                         tables.sites.clear()
-                        
+
                         sites = []
                         for tree in ts.trees():
                                 for site in tree.sites():
@@ -389,21 +422,21 @@ def joint_maf_filter(*ts_lists, args, maf=0.05, logfile=None):
                                         if f > args.maf and f < 1-args.maf:
                                                 sites.append(site)
                         site_ids = [(site.position, site.ancestral_state) for site in sites]
-                        
+
                         ts_dict['n_haps'][idx] = n_haps
                         ts_dict['tables'][idx] = tables
                         ts_dict['sites'][idx] = sites
                         ts_dict['site_ids'][idx] = site_ids
-                                        
+
                 shared_site_ids = set(ts_dict['site_ids'][0]).intersection(*ts_dict['site_ids'][1:])
-                
+
                 ts_dict['sites'] = [[site for site in ts_dict['sites'][idx] \
                                     if (site.position,site.ancestral_state) in shared_site_ids]
                                     for idx,_ in enumerate(ts_lists)]
-                
+
                 for idx, _ in enumerate(ts_lists):
                         tables = ts_dict['tables'][idx]
-                        
+
                         for site in ts_dict['sites'][idx]:
                                 shared_site = tables.sites.add_row(
                                         position=site.position,
@@ -412,12 +445,12 @@ def joint_maf_filter(*ts_lists, args, maf=0.05, logfile=None):
                                         site=shared_site,
                                         node=site.mutations[0].node,
                                         derived_state=site.mutations[0].derived_state)
-                                
+
                         ts_lists[idx][chr_idx] = tables.tree_sequence()
 
         return ts_lists
-    
-    
+
+
 def get_shared_var_idxs(ts_list1, ts_list2):
         r'''
         Get indices for variants in `ts_list1` that are also in `ts_list2.
@@ -461,8 +494,8 @@ def run_gwas(args, y, ts_list_gwas):
 #                pval_A_list[chr_idx] = pval_A
 
         return betahat_A_list, maf_A_list
-    
-def calc_corr(args, causal_idx_pheno_list, causal_idx_list, beta_est_list, 
+
+def calc_corr(args, causal_idx_pheno_list, causal_idx_list, beta_est_list,
               y_test, ts_list_test, only_h2_obs=False):
         if not only_h2_obs:
                 for chr_idx in range(args.n_chr):
@@ -475,7 +508,7 @@ def calc_corr(args, causal_idx_pheno_list, causal_idx_list, beta_est_list,
                         beta_A_pheno[causal_idx] = beta_A_list[chr_idx][causal_idx_pheno]
                         r = np.corrcoef(np.vstack((beta_A_pheno, beta_est)))[0,1]
                         to_log(args=args, string=f'correlation between betas: {r}')
-    
+
         n = int(ts_list_test[0].get_sample_size()/2 )
         yhat = np.zeros(n)
         for chr_idx in range(args.n_chr):
@@ -488,7 +521,7 @@ def calc_corr(args, causal_idx_pheno_list, causal_idx_list, beta_est_list,
                         causal_idx = causal_idx_list[chr_idx]
                         beta_est = np.zeros(shape=m_geno)
                         beta_est[causal_idx] = beta_est0[causal_idx_pheno]
-                for k, variant in enumerate(ts_geno.variants()): 
+                for k, variant in enumerate(ts_geno.variants()):
                         X_A = nextSNP_add(variant)
                         yhat += X_A * beta_est[k]
         r = np.corrcoef(np.vstack((y_test, yhat)))[0,1]
@@ -709,18 +742,21 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
                 ld_blk = ld_list[chr_idx]
                 blk_size = [len(blk) for blk in ld_blk]
                 beta_est = mcmc(a, b, phi, sst_dict, n, ld_blk, blk_size,
-                                  n_iter, n_burnin, thin, chr_idx+1, 
+                                  n_iter, n_burnin, thin, chr_idx+1,
                                   beta_std, seed, args=args)
                 beta_est_list.append(beta_est)
         return beta_est_list
 
 if __name__ == '__main__':
         args = parser.parse_args()
-        
+
         to_log(args=args, string=f'start time: {dt.now().strftime("%d/%m/%Y %H:%M:%S")}')
         to_log(args=args, string=args)
-        
-        # TODO: Consider adding argument for genotype proportion
+
+        # TODO: Consider adding argument for proportion of genome that is genotyped
+
+        # download gctb and plink
+        gctb_path, plink_path = get_plink_gctb()
 
         # simulate tree sequences
         start_sim_ts = dt.now()
@@ -729,48 +765,48 @@ if __name__ == '__main__':
         to_log(args=args, string=f'sim ts time (min): {round((dt.now()-start_sim_ts).seconds/60, 2)}\n')
 
         # split into ref and non-ref (non-ref will have both the gwas and test sets)
-        ts_list_ref, ts_list_nonref = split(ts_list_both=ts_list_all, 
+        ts_list_ref, ts_list_nonref = split(ts_list_both=ts_list_all,
                                             n1=args.n_ref)
 
         # simulate phenotype
         start_sim_phen = dt.now()
-        y, beta_A_list, ts_pheno_A_list, causal_A_idx_list = sim_phen(args=args, 
-                                                                      n_pops=n_pops, 
-                                                                      ts_list=ts_list_nonref, 
+        y, beta_A_list, ts_pheno_A_list, causal_A_idx_list = sim_phen(args=args,
+                                                                      n_pops=n_pops,
+                                                                      ts_list=ts_list_nonref,
                                                                       m_total=m_total)
         assert y.shape[0] == args.n_gwas+args.n_test
         y_gwas = y[:args.n_gwas] # take first n_gwas individuals, just like in the splitting of ts_list_nonref
         y_test = y[args.n_gwas:] # take the complement of the first n_gwas individuals, just like in the splitting of ts_list_nonref
         # TODO: Check that individuals are in the same order in ts_pheno_A_list and ts_list_nonref
         to_log(args=args, string=f'sim phen time: {round((dt.now()-start_sim_phen).seconds/60, 2)} min\n')
-        
+
         # split non-ref into gwas and test sets
-        ts_list_gwas, ts_list_test = split(ts_list_both=ts_list_nonref, 
-                                           n1=args.n_gwas) 
+        ts_list_gwas, ts_list_test = split(ts_list_both=ts_list_nonref,
+                                           n1=args.n_gwas)
 
         # MAF filter ref, gwas, and test cohorts
         # TODO: remove necessity of passing args to this function to get n_chr
         start_joint_maf = dt.now()
-        ts_list_ref, ts_list_gwas, ts_list_test = joint_maf_filter(ts_list_ref, 
+        ts_list_ref, ts_list_gwas, ts_list_test = joint_maf_filter(ts_list_ref,
                                                                    ts_list_gwas,
                                                                    ts_list_test,
                                                                    args=args,
                                                                    maf=args.maf)
         # get causal variant indices for the GWAS cohort
         causal_idx_pheno_gwas_list = get_shared_var_idxs(ts_pheno_A_list, ts_list_nonref)
-        causal_idx_gwas_pheno_list = get_shared_var_idxs(ts_list_nonref, ts_pheno_A_list) 
-                
+        causal_idx_gwas_pheno_list = get_shared_var_idxs(ts_list_nonref, ts_pheno_A_list)
+
         # TODO: calculate observed h2
-        calc_corr(args=args, 
-                  causal_idx_pheno_list=causal_idx_pheno_gwas_list, 
+        calc_corr(args=args,
+                  causal_idx_pheno_list=causal_idx_pheno_gwas_list,
                   causal_idx_list=causal_idx_gwas_pheno_list,
                   beta_est_list=beta_A_list,
                   y_test=y,
                   ts_list_test=ts_list_nonref,
                   only_h2_obs=True)
-        
+
         # TODO: update _update_vars to remove extraneous code
-        _, genotyped_list_index, m_total, m_geno_total = _update_vars(args=args, 
+        _, genotyped_list_index, m_total, m_geno_total = _update_vars(args=args,
                                                                       ts_list=ts_list_gwas) # update only for discovery cohort
         to_log(args=args, string=f'\tpost maf filter variant ct: {m_total}')
         to_log(args=args, string=f'joint maf filter time: {round((dt.now()-start_joint_maf).seconds/60, 2)} min\n')
@@ -783,15 +819,76 @@ if __name__ == '__main__':
         # run GWAS (and calculate MAF along the way)
         # TODO: Make sure that y_gwas corresponds to the right individuals
         start_run_gwas = dt.now()
-        betahat_A_list, maf_A_list = run_gwas(args=args, 
-                                              y=y_gwas, 
+        betahat_A_list, maf_A_list = run_gwas(args=args,
+                                              y=y_gwas,
                                               ts_list_gwas=ts_list_gwas)
         to_log(args=args, string=f'run gwas time: {round((dt.now()-start_run_gwas).seconds/60, 2)} min\n')
 
+        # write beta-hats to file
+        # format: SNP A1 A2 freq b se p N
+        betahat_fname = 'betahat.ma'
+        with open(betahat_fname,'w') as betahat_file:
+                betahat_file.write('SNP A1 A2 freq b se p N\n')
+                n_haps = ts_list_gwas[0].get_sample_size()
+                for chr_idx in range(args.n_chr):
+                        betahat = betahat_A_list[chr_idx]
+                        snp_idx = 0
+#                        np.savetxt(fname='betahat.chr'+str(chr_idx+1)+'.tsv',
+#                                   X=betahat_A_list[chr_idx],
+#                                   fmt='%.3e',
+#                                   delimiter='\t',
+#                                   header='betahat.chr'+str(chr_idx+1))
+                        for tree in ts_list_gwas[chr_idx].trees():
+                                for site in tree.sites():
+                                        f = tree.get_num_leaves(site.mutations[0].node) / n_haps
+                                        betahat_file.write(f'{chr_idx+1}:{site.position} {site.ancestral_state} {1} {f} {betahat[snp_idx]} {2} {int(n_haps/2)}\n')
+                                        snp_idx += 1
+
+	# For adding suffix to duplicates: https://groups.google.com/forum/#!topic/comp.lang.python/VyzA4ksBj24
+
+        # write ref samples to PLINK
+        bfile_fname = 'ref'
+        mergelist_fname='tmp_mergelist.txt'
+        for chr_idx in range(args.n_chr):
+                vcf_fname = f"tmp_ref.chr{chr_idx+1}.vcf.gz"
+                with gzip.open(vcf_fname , "wt") as vcf_file:
+                        ts_list_ref[chr_idx].write_vcf(vcf_file, ploidy=2, contig_id=f'{chr_idx+1}')
+                if args.n_chr > 1:
+                        chr_bfile_fname = f'tmp_{bfile_fname}.chr{chr_idx+1}'
+                        with open(mergelist_fname,'w') as mergelist_file:
+                                mergelist_file.write(chr_bfile_fname+'\n')
+                elif args.n_chr==1:
+                        chr_bfile_fname = bfile_fname
+                subprocess.call(f'{plink_path} --vcf {vcf_fname } --double-id --silent --make-bed --out {chr_bfile_fname}'.split())
+                tail_popen = subprocess.Popen(f'tail -n +2 {betahat_fname}'.split(), stdout = subprocess.PIPE)
+                awk1_popen = subprocess.Popen(['grep', f'^{chr_idx+1}:*' ], stdin = tail_popen.stdout, stdout = subprocess.PIPE)
+                tmp_betahat_chr_fname = 'tmp_betahat_chr.txt'
+                with open(tmp_betahat_chr_fname, 'wb') as tmp_file:
+                        tmp_file.write(awk1_popen.communicate()[0])
+  		# NOTE: This assumes that the GWAS and ref samples have exactly the same SNP positions
+                paste_popen =  subprocess.Popen(f'paste {chr_bfile_fname}.bim {tmp_betahat_chr_fname}'.split(), stdout = subprocess.PIPE)
+                awk2_popen = subprocess.Popen(['awk','{ print $1 "\t" $7 "\t" $3 "\t" $4 "\t" $5 "\t" $6 }'], stdin=paste_popen.stdout, stdout = subprocess.PIPE)
+                with open(f'{chr_bfile_fname}.bim', 'wb') as chr_bim_file:
+                        chr_bim_file.write(awk2_popen.communicate()[0])
+        if args.n_chr>1:
+                subprocess.call(f'{plink_path} --mergelist {mergelist_fname} --make-bed --out {bfile_fname}'.split())
+
+        # run gctb
+        subprocess.Popen(f'{gctb_path} --bfile {bfile_fname} --make-full-ldm --out {bfile_fname}'.split(),
+                        stdout=subprocess.PIPE)
+        subprocess.Popen(f'{gctb_path} --sbayes R --ldm {bfile_fname}.ldm.full \
+                        --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 \
+                        --gwas-summary {betahat_fname} --chain-length 10000 \
+                        --burn-in 2000  --out-freq 10 --out {bfile_fname}'.split(),
+                            stdout=subprocess.PIPE)
+
+#        with open(f'{bfile_fname}.snpRes','r') as snpRes_file:
+
+
         # calculate beta/betahat and y/yhat correlations
-        calc_corr(args=args, 
-                  causal_idx_pheno_list=causal_idx_pheno_list, 
-                  causal_idx_list=causal_idx_test_list, 
+        calc_corr(args=args,
+                  causal_idx_pheno_list=causal_idx_pheno_list,
+                  causal_idx_list=causal_idx_test_list,
                   beta_est_list=betahat_A_list,
                   y_test=y_test,
                   ts_list_test=ts_list_test)
@@ -804,21 +901,20 @@ if __name__ == '__main__':
 
         # run PRS-CS
         start_prs_cs = dt.now()
-        beta_est_list = prs_cs(args=args, 
-                               betahat_A_list=betahat_A_list, 
-                               maf_A_list=maf_A_list, 
+        beta_est_list = prs_cs(args=args,
+                               betahat_A_list=betahat_A_list,
+                               maf_A_list=maf_A_list,
                                ld_list=ld_list)
         to_log(args=args, string=f'prs-cs time: {round((dt.now()-start_prs_cs).seconds/60, 2)} min\n')
 
 
         # calculate beta/betahat and y/yhat correlations
-        calc_corr(args=args, 
-                  causal_idx_pheno_list=causal_idx_pheno_list, 
-                  causal_idx_list=causal_idx_test_list, 
-                  beta_est_list=beta_est_list, 
+        calc_corr(args=args,
+                  causal_idx_pheno_list=causal_idx_pheno_list,
+                  causal_idx_list=causal_idx_test_list,
+                  beta_est_list=beta_est_list,
                   y_test=y_test,
                   ts_list_test=ts_list_test)
 
         to_log(args=args, string=f'total time (min): {round((dt.now()-start_sim_ts).seconds/60, 2)}')
-        
 
