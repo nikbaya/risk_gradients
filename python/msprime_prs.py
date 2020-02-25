@@ -1023,7 +1023,7 @@ if __name__ == '__main__':
         sbayesr_betahat_list = run_SBayesR(args=args, gctb_path=gctb_path, bfile=bfile)
 
     	# calculate beta/betahat and y/yhat correlations
-        to_log(args=args, string=f'corr for SBayesR (m={m_total})')
+        to_log(args=args, string=f'\ncorr for SBayesR (m={m_total})')
         calc_corr(args=args,
                   causal_idx_pheno_list=causal_idx_pheno_list,
                   causal_idx_list=causal_idx_test_list,
@@ -1032,7 +1032,7 @@ if __name__ == '__main__':
                   ts_list_test=ts_list_test)
 
         # calculate beta/betahat and y/yhat correlations
-        to_log(args=args, string=f'corr for GWAS betas (m={m_total})')
+        to_log(args=args, string=f'\ncorr for GWAS betas (m={m_total})')
         calc_corr(args=args,
                   causal_idx_pheno_list=causal_idx_pheno_list,
                   causal_idx_list=causal_idx_test_list,
