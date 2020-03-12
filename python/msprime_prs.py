@@ -6,10 +6,10 @@ Created on Sat Feb      1 14:50:37 2020
 Runs large-scale simulations for testing PRS-CS.
 
 To setup VM:
-conda create -n msprime -y -q python=3.6.10 numpy=1.18.1 scipy=1.4.1 # create conda environment named msprime and install msprime dependencies
+conda create -n msprime -y -q python=3.6.10 numpy=1.18.1 scipy=1.4.1 pandas=1.0.1 # create conda environment named msprime and install msprime dependencies
 conda activate msprime # activate msprime environment
 conda install -y -c conda-forge msprime # install msprime Python package
-wget -O msprime_prs.py https://raw.githubusercontent.com/nikbaya/risk_gradients/master/python/msprime_prs.py
+wget -O msprime_prs.py https://raw.githubusercontent.com/nikbaya/risk_gradients/master/python/msprime_prs.py && chmod +x msprime_prs.py
 
 @author: nbaya
 """
@@ -25,6 +25,9 @@ import math
 import msprime
 import gzip
 import subprocess
+import pandas as pd
+from multiprocessing import Pool, cpu_count
+from functools import partial
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--n_gwas', default=10000, type=int,
@@ -53,7 +56,7 @@ parser.add_argument('--sim_after_maf', default=False, action='store_true',
         help='Will simulate phenotype on MAF-filtered SNPs.'
         'Otherwise the phenotype is simulated on all SNPs, which are then'
         'MAF filtered before the GWAS is run')
-parser.add_argument('--rec_map', default=None, type=str,
+parser.add_argument('--rec_map', default=False, type=str,
         help='If you want to pass a recombination map, include the filepath here. '
         'The filename should contain the symbol @, msprimesim will replace instances '
         'of @ with chromosome numbers.')
@@ -569,30 +572,40 @@ def write_betahats(args, ts_list, beta_list, pval_list, se_list, betahat_fname):
                             betahat_file.write(f'{chr_idx+1}:{variant.site.position} {1} {0} {af} {betahat[snp_idx]} {se[snp_idx]} {pval[snp_idx]} {int(n_haps/2)}\n')
                             snp_idx += 1
 
+def _from_vcf(betahat, chr_idx):
+        r'''
+        For parallelized exporting from VCF and updating bim file with SNP IDs
+        '''
+        chr_betahat = betahat[betahat.CHR==(chr_idx+1)].reset_index(drop=True)
+        vcf_fname = f"tmp_ref.chr{chr_idx+1}.vcf.gz"
+        with gzip.open(vcf_fname , "wt") as vcf_file:
+                ts_list_ref[chr_idx].write_vcf(vcf_file, ploidy=2, contig_id=f'{chr_idx+1}')
+        if args.n_chr > 1:
+                chr_bfile_fname = f'tmp_{bfile}.chr{chr_idx+1}'
+        elif args.n_chr==1:
+                chr_bfile_fname = bfile
+        subprocess.call(f'{plink_path} --vcf {vcf_fname } --double-id --silent --make-bed --out {chr_bfile_fname}'.split())
+        chr_bim = pd.read_csv(f'{chr_bfile_fname}.bim', delim_whitespace=True,
+                              names=['CHR','SNP_old','CM','BP','A1','A2']) # name SNP ID field "SNP_old" to avoid name collision when merging with betahats
+        assert chr_bim.shape[0]==chr_betahat.shape[0], f'chr_bim rows: {chr_bim.shape[0]} chr_betahats rows: {chr_betahat.shape[0]}' # check that file lengths are the same
+        merged = chr_bim.join(chr_betahat[['SNP']], how='inner') # only take SNP ID field from betahats
+        merged = merged[['CHR','SNP','CM','BP','A1','A2']]
+        merged.to_csv(f'{chr_bfile_fname}.bim',sep='\t',index=False,header=False) # overwrite existing bim file
+
 def write_to_plink(args, ts_list, bfile, betahat_fname):
         r'''
         Write ts_list files to bfile and merge across chromosomes if necessary
         '''
-        for chr_idx in range(args.n_chr):
-                vcf_fname = f"tmp_ref.chr{chr_idx+1}.vcf.gz"
-                with gzip.open(vcf_fname , "wt") as vcf_file:
-                        ts_list_ref[chr_idx].write_vcf(vcf_file, ploidy=2, contig_id=f'{chr_idx+1}')
-                if args.n_chr > 1:
-                        chr_bfile_fname = f'tmp_{bfile}.chr{chr_idx+1}'
-                elif args.n_chr==1:
-                        chr_bfile_fname = bfile
-                subprocess.call(f'{plink_path} --vcf {vcf_fname } --double-id --silent --make-bed --out {chr_bfile_fname}'.split())
-                tail_popen = subprocess.Popen(f'tail -n +2 {betahat_fname}'.split(), stdout = subprocess.PIPE)
-                awk1_popen = subprocess.Popen(['grep', f'^{chr_idx+1}:*' ], stdin = tail_popen.stdout, stdout = subprocess.PIPE)
-                tmp_betahat_chr_fname = 'tmp_betahat_chr.txt'
-                with open(tmp_betahat_chr_fname, 'wb') as tmp_file:
-                        tmp_file.write(awk1_popen.communicate()[0])
-                # NOTE: This assumes that the GWAS and ref samples have exactly the same SNP positions
-                paste_popen =  subprocess.Popen(f'paste {chr_bfile_fname}.bim {tmp_betahat_chr_fname}'.split(), stdout = subprocess.PIPE)
-                awk2_popen = subprocess.Popen(['awk','{ print $1 "\t" $7 "\t" $3 "\t" $4 "\t" $5 "\t" $6 }'], stdin=paste_popen.stdout, stdout = subprocess.PIPE)
-                with open(f'{chr_bfile_fname}.bim', 'wb') as chr_bim_file:
-                        chr_bim_file.write(awk2_popen.communicate()[0])
-                # TODO: Clean up tmp files
+        betahat = pd.read_csv(betahat_fname, delim_whitespace=True)
+        betahat['CHR'] = betahat.SNP.str.split(':',expand=True)[0].astype(int)
+        n_threads = cpu_count() # can set to be lower if needed
+        pool = Pool(n_threads)
+        part_func = partial(_from_vcf, betahat) # allows passing multiple arguments to from_vcf when parallelized
+        chrs = range(args.n_chr) # list of chromosome indexes (0-indexed)
+        pool.map(part_func, chrs) # parallelize    
+        pool.close()
+        pool.join()
+        
         if args.n_chr>1:
                 mergelist_fname='tmp_mergelist.txt'
                 with open(mergelist_fname,'w') as mergelist_file:
