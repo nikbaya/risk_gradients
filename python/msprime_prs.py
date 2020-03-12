@@ -9,6 +9,7 @@ To setup VM:
 conda create -n msprime -y -q python=3.6.10 numpy=1.18.1 scipy=1.4.1 # create conda environment named msprime and install msprime dependencies
 conda activate msprime # activate msprime environment
 conda install -y -c conda-forge msprime # install msprime Python package
+wget -O msprime_prs.py https://raw.githubusercontent.com/nikbaya/risk_gradients/master/python/msprime_prs.py
 
 @author: nbaya
 """
@@ -263,7 +264,7 @@ def sim_ts(args, rec_map_path):
                                                                                    rate=args.rec,
                                                                                    num_loci=args.m_per_chr)
                         rec_map_list.append(rec_map)
-                args.rec, args.m_per_chr = None, None
+                args.rec = None
         else:
                 rec_map_list = [None for x in range(args.n_chr)]
 
@@ -284,7 +285,8 @@ def sim_ts(args, rec_map_path):
                                                     migration_matrix=migration_mat,
                                                     demographic_events=demographic_events,
                                                     recombination_map=rec_map_list[chr_idx],
-                                                    length=args.m_per_chr, Ne=Ne,
+                                                    length=None if args.rec_map else args.m_per_chr, 
+                                                    Ne=Ne,
                                                     recombination_rate=args.rec,
                                                     mutation_rate=args.mut,
                                                     random_seed=random_seed))
@@ -561,26 +563,22 @@ def write_betahats(args, ts_list, beta_list, pval_list, se_list, betahat_fname):
                     pval = pval_list[chr_idx]
                     se = se_list[chr_idx]
                     snp_idx = 0
-                    for tree in ts_list[chr_idx].trees():
-                            for site in tree.sites():
-                                    f = tree.get_num_leaves(site.mutations[0].node) / n_haps # frequency of _____ allele
-                                    # TODO: Check that ancestral state is effect allele or other allele
-                                    betahat_file.write(f'{chr_idx+1}:{site.position} {site.ancestral_state} {1} {f} {betahat[snp_idx]} {se[snp_idx]} {pval[snp_idx]} {int(n_haps/2)}\n')
-                                    snp_idx += 1
+                    for k, variant in enumerate(ts_list[chr_idx].variants()): # Note, progress here refers you to tqdm which just creates a pretty progress bar.
+                            gt = (np.array(variant.genotypes[0::2].astype(int)) + np.array(variant.genotypes[1::2].astype(int)))
+                            af = np.mean(gt)/2 # frequency of non-ancestral allele (note: non-ancestral allele is effect allele)
+                            betahat_file.write(f'{chr_idx+1}:{variant.site.position} {1} {0} {af} {betahat[snp_idx]} {se[snp_idx]} {pval[snp_idx]} {int(n_haps/2)}\n')
+                            snp_idx += 1
 
 def write_to_plink(args, ts_list, bfile, betahat_fname):
         r'''
         Write ts_list files to bfile and merge across chromosomes if necessary
         '''
-        mergelist_fname='tmp_mergelist.txt'
         for chr_idx in range(args.n_chr):
                 vcf_fname = f"tmp_ref.chr{chr_idx+1}.vcf.gz"
                 with gzip.open(vcf_fname , "wt") as vcf_file:
                         ts_list_ref[chr_idx].write_vcf(vcf_file, ploidy=2, contig_id=f'{chr_idx+1}')
                 if args.n_chr > 1:
                         chr_bfile_fname = f'tmp_{bfile}.chr{chr_idx+1}'
-                        with open(mergelist_fname,'a') as mergelist_file:
-                                mergelist_file.write(chr_bfile_fname+'\n')
                 elif args.n_chr==1:
                         chr_bfile_fname = bfile
                 subprocess.call(f'{plink_path} --vcf {vcf_fname } --double-id --silent --make-bed --out {chr_bfile_fname}'.split())
@@ -594,7 +592,11 @@ def write_to_plink(args, ts_list, bfile, betahat_fname):
                 awk2_popen = subprocess.Popen(['awk','{ print $1 "\t" $7 "\t" $3 "\t" $4 "\t" $5 "\t" $6 }'], stdin=paste_popen.stdout, stdout = subprocess.PIPE)
                 with open(f'{chr_bfile_fname}.bim', 'wb') as chr_bim_file:
                         chr_bim_file.write(awk2_popen.communicate()[0])
+                # TODO: Clean up tmp files
         if args.n_chr>1:
+                mergelist_fname='tmp_mergelist.txt'
+                with open(mergelist_fname,'w') as mergelist_file:
+                        mergelist_file.write('\n'.join([f'tmp_{bfile}.chr{chr_idx+1}' for chr_idx in range(args.n_chr)]))
                 subprocess.call(f'{plink_path} --merge-list {mergelist_fname} --make-bed --out {bfile}'.split())
 
 def run_SBayesR(args, gctb_path, bfile):
