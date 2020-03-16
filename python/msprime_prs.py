@@ -72,9 +72,11 @@ def to_log(args, string):
         Prints string and sends it to the log file
         '''
         if args is not None:
+                use_recmap = True if args.rec_map else False
                 logfile =  f'ngwas_{args.n_gwas}.ntest_{args.n_test}.nref_{args.n_ref}.'
                 logfile += f'mperchr_{args.m_per_chr}.nchr_{args.n_chr}.h2_{args.h2_A}.'
-                logfile += f'pcausal_{args.p_causal}.seed_{args.seed}.log'
+                logfile += f'pcausal_{args.p_causal}.simaftermaf_{args.sim_after_maf}.'
+                logfile += f'recmap_{use_recmap}.seed_{args.seed}.log'
                 if args.verbose:
                         print(string)
         else:
