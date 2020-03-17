@@ -101,9 +101,9 @@ def get_downloads(args):
                 print(f'downloading gctb to {gctb_path}')
                 gctb_wget_url = 'https://cnsgenomics.com/software/gctb/download/gctb_2.0_Linux.zip'
                 exit_code = subprocess.call(f'wget --quiet -nc {gctb_wget_url} -P {software_dir}'.split())
-                print('' if exit_code==0 else 'wget when downloading GCTB failed (exit code: {exit_code})')
+                assert exit_code==0, f'wget when downloading GCTB failed (exit code: {exit_code})'
                 exit_code = subprocess.call(f'unzip -q {software_dir}/gctb_2.0_Linux.zip -d {software_dir}'.split())
-                print('' if exit_code==0 else 'unzip when downloading GCTB failed (exit code: {exit_code})')
+                assert exit_code==0, f'unzip when downloading GCTB failed (exit code: {exit_code})'
                 
         # download plink
         plink_path = f'{software_dir }/plink'
@@ -111,9 +111,9 @@ def get_downloads(args):
                 print(f'downloading plink to {plink_path}')
                 plink_wget_url = 'http://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20200219.zip'
                 exit_code = subprocess.call(f'wget --quiet -nc {plink_wget_url} -P {software_dir}'.split())
-                print('' if exit_code==0 else 'wget when downloading PLINK failed (exit code: {exit_code})')
+                assert exit_code==0, f'wget when downloading PLINK failed (exit code: {exit_code})'
                 exit_code = subprocess.call(f'unzip -q {software_dir}/plink_linux_x86_64_20200219.zip -d {software_dir}'.split())
-                print('' if exit_code==0 else 'unzip when downloading PLINK failed (exit code: {exit_code})')
+                assert exit_code==0, f'unzip when downloading PLINK failed (exit code: {exit_code})'
                 
         if args.rec_map:
                 if Path(args.rec_map.replace('@','1')).exists(): # only check chr 1
@@ -125,8 +125,8 @@ def get_downloads(args):
                                 chr_recmap_wget_url = recmap_wget_url.replace("@",f"{chr_idx+1}")
                                 if not Path(f'{recmap_dir}/{chr_recmap_wget_url.split("/")[-1]}').exists():
                                         exit_code = subprocess.call(f'wget --quiet -nc {chr_recmap_wget_url} -P {recmap_dir}'.split())
-                                        print(f'downloaded recmap for chr {chr_idx+1} (b37)' if exit_code==0 
-                                              else 'wget when downloading recmap for chr {chr_idx+1} failed (exit code: {exit_code})')
+                                        assert exit_code==0, f'wget when downloading recmap for chr {chr_idx+1} failed (exit code: {exit_code})'
+                                        print(f'downloaded recmap for chr {chr_idx+1} (b37)')
                         rec_map_path = f'{recmap_dir}/{recmap_wget_url.split("/")[-1]}'
         else:
             rec_map_path = None
@@ -656,11 +656,13 @@ def run_SBayesR(args, gctb_path, bfile):
         --out {bfile}'''.split(),
         )
         
+        # NOTE: --pi values must add up to 1 and must match the number of values passed to gamma
         subprocess.call(
         f'''{gctb_path} \
         --sbayes R --ldm {bfile}.ldm.full \
-        --pi 1,0.95,0.02,0.02,0.01 --gamma 0.00.0,0.01,0.1,1 \
+        --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 \
         --gwas-summary {betahat_fname} --chain-length 10000 \
+        --hsq {args.h2_A} \ # cheat by starting hsq (heritability) with true heritability
         --burn-in 2000  --out-freq 10 --out {bfile}'''.split()
         )
 
