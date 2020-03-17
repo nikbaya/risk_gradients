@@ -8,7 +8,7 @@ Runs large-scale simulations for testing PRS-CS.
 To setup VM:
 conda create -n msprime -y -q python=3.6.10 numpy=1.18.1 scipy=1.4.1 pandas=1.0.1 # create conda environment named msprime and install msprime dependencies
 conda activate msprime # activate msprime environment
-conda install -y -c conda-forge msprime # install msprime Python package
+conda install -y -c conda-forge msprime=0.7.4 # install msprime Python package
 wget -O msprime_prs.py https://raw.githubusercontent.com/nikbaya/risk_gradients/master/python/msprime_prs.py && chmod +x msprime_prs.py
 
 @author: nbaya
@@ -613,6 +613,11 @@ def write_to_plink(args, ts_list, bfile, betahat_fname):
                 with open(mergelist_fname,'w') as mergelist_file:
                         mergelist_file.write('\n'.join([f'tmp_{bfile}.chr{chr_idx+1}' for chr_idx in range(args.n_chr)]))
                 subprocess.call(f'{plink_path} --merge-list {mergelist_fname} --make-bed --out {bfile}'.split())
+                
+def plink_clumping(args, ts_list, bfile, betahat_fname):
+        r'''
+        Run PLINK --clump to get set of SNPs for PRS
+        '''
 
 def run_SBayesR(args, gctb_path, bfile):
         r'''
@@ -1032,14 +1037,43 @@ if __name__ == '__main__':
         # For adding suffix to duplicates: https://groups.google.com/forum/#!topic/comp.lang.python/VyzA4ksBj24
 
         # write ref samples to PLINK
-        bfile = 'ref'
+        bfile = 'ref' # bfile prefix of PLINK files of reference set
         write_to_plink(args=args, ts_list=ts_list_ref, bfile=bfile,
                        betahat_fname=betahat_fname)
+        
+        # run PLINK clumping and get 
+        plink_clumping(args=args, ts_list=ts_list_ref, bfile=bfile,
+                       betahat_fname=betahat_fname)
+        
 
         # run gctb and convert betas
         sbayesr_betahat_list = run_SBayesR(args=args, gctb_path=gctb_path, bfile=bfile)
 
-    	# calculate beta/betahat and y/yhat correlations
+        # calculate LD matrix for PRS-CS
+        start_calc_ld = dt.now()
+        ld_list = calc_ld(args=args,
+                          ts_list_ref=ts_list_ref)
+        to_log(args=args, string=f'calc ld time: {round((dt.now()-start_calc_ld).seconds/60, 2)} min\n')
+
+        # run PRS-CS
+        start_prs_cs = dt.now()
+        prscs_betahat_list = prs_cs(args=args,
+                               betahat_A_list=betahat_A_list,
+                               maf_A_list=maf_A_list,
+                               ld_list=ld_list)
+        to_log(args=args, string=f'prs-cs time: {round((dt.now()-start_prs_cs).seconds/60, 2)} min\n')
+
+
+        # calculate beta/betahat and y/yhat correlations for unadjusted GWAS
+        to_log(args=args, string=f'\ncorr for unadjusted GWAS betas (m={m_total})')
+        calc_corr(args=args,
+                  causal_idx_pheno_list=causal_idx_pheno_list,
+                  causal_idx_list=causal_idx_test_list,
+                  beta_est_list=betahat_A_list,
+                  y_test=y_test,
+                  ts_list_test=ts_list_test)
+
+    	# calculate beta/betahat and y/yhat correlations for SBayesR
         to_log(args=args, string=f'\ncorr for SBayesR (m={m_total})')
         calc_corr(args=args,
                   causal_idx_pheno_list=causal_idx_pheno_list,
@@ -1048,35 +1082,12 @@ if __name__ == '__main__':
                   y_test=y_test,
                   ts_list_test=ts_list_test)
 
-        # calculate beta/betahat and y/yhat correlations
-        to_log(args=args, string=f'\ncorr for GWAS betas (m={m_total})')
+        # calculate beta/betahat and y/yhat correlations for PRS-CS
+        to_log(args=args, string=f'\ncorr for PRS-CS (m={m_total})')
         calc_corr(args=args,
                   causal_idx_pheno_list=causal_idx_pheno_list,
                   causal_idx_list=causal_idx_test_list,
-                  beta_est_list=betahat_A_list,
-                  y_test=y_test,
-                  ts_list_test=ts_list_test)
-
-        # calculate LD matrix
-        start_calc_ld = dt.now()
-        ld_list = calc_ld(args=args,
-                          ts_list_ref=ts_list_ref)
-        to_log(args=args, string=f'calc ld time: {round((dt.now()-start_calc_ld).seconds/60, 2)} min\n')
-
-        # run PRS-CS
-        start_prs_cs = dt.now()
-        beta_est_list = prs_cs(args=args,
-                               betahat_A_list=betahat_A_list,
-                               maf_A_list=maf_A_list,
-                               ld_list=ld_list)
-        to_log(args=args, string=f'prs-cs time: {round((dt.now()-start_prs_cs).seconds/60, 2)} min\n')
-
-
-        # calculate beta/betahat and y/yhat correlations
-        calc_corr(args=args,
-                  causal_idx_pheno_list=causal_idx_pheno_list,
-                  causal_idx_list=causal_idx_test_list,
-                  beta_est_list=beta_est_list,
+                  beta_est_list=prscs_betahat_list,
                   y_test=y_test,
                   ts_list_test=ts_list_test)
 
