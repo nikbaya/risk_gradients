@@ -606,9 +606,9 @@ def write_to_plink(args, ts_list, bfile, betahat_fname, plink_path):
         pool.join()
         
         if args.n_chr>1:
-                mergelist_fname='tmp_mergelist.txt'
+                mergelist_fname=f'{bfile}.mergelist.txt'
                 with open(mergelist_fname,'w') as mergelist_file:
-                        mergelist_file.write('\n'.join([f'tmp_{bfile}.chr{chr_idx+1}' for chr_idx in range(args.n_chr)]))
+                        mergelist_file.write('\n'.join([f'{bfile}.chr{chr_idx+1}' for chr_idx in range(args.n_chr)]))
                 subprocess.call(f'{plink_path} --merge-list {mergelist_fname} --make-bed --out {bfile}'.split())
                 
 def plink_clump(args, ts_list, bfile, betahat_fname, plink_path, betahat_list):
@@ -659,15 +659,27 @@ def run_SBayesR(args, gctb_path, bfile):
         assert exit_code==0, f'make-full-ldm failed (exit code: {exit_code})'
         
         # NOTE: --pi values must add up to 1 and must match the number of values passed to gamma
-        # NOTE: cheat by starting hsq (heritability) with true heritability
+        # NOTE: can cheat by starting hsq (heritability) with true heritability by adding the following line
+        # --hsq {args.h2_A} \
+        
+        # DEFAULT
         exit_code = subprocess.call(
         f'''{gctb_path} \
         --sbayes R --ldm {bfile}.ldm.full \
         --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 \
         --gwas-summary {betahat_fname} --chain-length 10000 \
-        --hsq {args.h2_A} \
         --burn-in 2000  --out-freq 10 --out {bfile}'''.split()
         )
+        
+        # INFINITESIMAL
+        exit_code = subprocess.call(
+        f'''{gctb_path} \
+        --sbayes R --ldm {bfile}.ldm.full \
+        --pi 1 --gamma 1 \
+        --gwas-summary {betahat_fname} --chain-length 10000 \
+        --burn-in 2000  --out-freq 10 --out {bfile}'''.split()
+        )
+        
         assert exit_code==0, f'SBayesR failed (exit code: {exit_code})' # NOTE: this might not actually be effective
 
         to_log(args=args, string='converting SBayesR beta-hats')
