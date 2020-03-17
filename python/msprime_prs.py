@@ -624,6 +624,7 @@ def plink_clump(args, ts_list, bfile, betahat_fname, plink_path, betahat_list):
         clump_kb = 500
         exit_code = subprocess.call( # get exit code
         f'''{plink_path} \
+        --silent \
         --bfile {bfile} \
         --clump {betahat_fname} \
         --clump-field p \
@@ -664,7 +665,7 @@ def run_SBayesR(args, gctb_path, bfile):
         subprocess.call(
         f'''{gctb_path} \
         --sbayes R --ldm {bfile}.ldm.full \
-        --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 \
+        --pi 1,0.95,0.02,0.02,0.01 --gamma 0.00.0,0.01,0.1,1 \
         --gwas-summary {betahat_fname} --chain-length 10000 \
         --burn-in 2000  --out-freq 10 --out {bfile}'''.split()
         )
