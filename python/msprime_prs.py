@@ -558,7 +558,7 @@ def run_gwas(args, y, ts_list_gwas):
 
 def write_betahats(args, ts_list, beta_list, pval_list, se_list, betahat_fname):
         r'''
-        Write beta-hats to file
+        Write beta-hats to file in the .ma format: https://cnsgenomics.com/software/gctb/#SummaryBayesianAlphabet
         '''
         with open(betahat_fname,'w') as betahat_file:
             betahat_file.write('SNP A1 A2 freq b se p N\n')
@@ -568,9 +568,9 @@ def write_betahats(args, ts_list, beta_list, pval_list, se_list, betahat_fname):
                     pval = pval_list[chr_idx]
                     se = se_list[chr_idx]
                     snp_idx = 0
-                    for k, variant in enumerate(ts_list[chr_idx].variants()): # Note, progress here refers you to tqdm which just creates a pretty progress bar.
+                    for k, variant in enumerate(ts_list[chr_idx].variants()): 
                             gt = (np.array(variant.genotypes[0::2].astype(int)) + np.array(variant.genotypes[1::2].astype(int)))
-                            af = np.mean(gt)/2 # frequency of non-ancestral allele (note: non-ancestral allele is effect allele)
+                            af = np.mean(gt)/2 # frequency of non-ancestral allele (note: non-ancestral allele is effect allele, denoted as '1' in the A1 field)
                             betahat_file.write(f'{chr_idx+1}:{variant.site.position} {1} {0} {af} {betahat[snp_idx]} {se[snp_idx]} {pval[snp_idx]} {int(n_haps/2)}\n')
                             snp_idx += 1
 
@@ -614,27 +614,63 @@ def write_to_plink(args, ts_list, bfile, betahat_fname, plink_path):
                         mergelist_file.write('\n'.join([f'tmp_{bfile}.chr{chr_idx+1}' for chr_idx in range(args.n_chr)]))
                 subprocess.call(f'{plink_path} --merge-list {mergelist_fname} --make-bed --out {bfile}'.split())
                 
-def plink_clumping(args, ts_list, bfile, betahat_fname, plink_path):
+def plink_clump(args, ts_list, bfile, betahat_fname, plink_path, betahat_list):
         r'''
         Run PLINK --clump to get set of SNPs for PRS
         '''
-        subprocess.call(f'{plink_path} --bfile {bfile} --make-full-ldm --out {bfile}'.split())
-
+        clump_p1 = 1
+        clump_p2 = 1
+        clump_r2 = 0.1
+        clump_kb = 500
+        exit_code = subprocess.call( # get exit code
+        f'''{plink_path} \
+        --bfile {bfile} \
+        --clump {betahat_fname} \
+        --clump-field p \
+        --clump-p1 {clump_p1} \
+        --clump-p2 {clump_p2} \
+        --clump-r2 {clump_r2} \
+        --clump-kb {clump_kb} \
+        --out {bfile}'''.split())
+        
+        assert exit_code==0, f'PLINK clumping failed, exit code: {exit_code}'
+        
+        to_log(args=args, string='converting PLINK --clump results into beta-hats')
+        clumped_betahat_list = [[0 for tree in ts_list_ref[chr_idx].trees() for site in tree.sites()] for chr_idx in range(args.n_chr)] # list of lists of beta-hats for SNPs on each chromosome, initialize all as zero
+        clumped = pd.read_csv(f'{bfile}.clumped', delim_whitespace=True) # initially sorted by SNP significance
+        clumped = clumped.sort_values(by='BP') # sort by base pair position
+        for chr_idx in range(args.n_chr):
+                chr_positions = [site.position for tree in ts_list_test[chr_idx].trees() for site in tree.sites()] # list of SNP positions in tree sequence
+                print(chr_positions)
+                chr_betahats = betahat_list[chr_idx]
+                chrom = chr_idx+1
+                clumped_chr = clumped[clumped['CHR']==chrom]
+                clumped_pos_list = clumped_chr['SNP'].str.split(':', expand=True)[1].astype('float').to_list() # split SNP IDs by ':', take the second half and keep position floats as list
+                print(clumped_pos_list)
+                clumped_betahat_list[chr_idx] = [(snp_betahat if chr_pos in clumped_pos_list else 0) for chr_pos,snp_betahat in zip(chr_positions, chr_betahats)]
+        return clumped_betahat_list
 
 def run_SBayesR(args, gctb_path, bfile):
         r'''
         Run SBayesR on `bfile` and convert beta-hats
         '''
-        subprocess.call(f'{gctb_path} --bfile {bfile} --make-full-ldm --out {bfile}'.split(),
-                        )
-        subprocess.call(f'{gctb_path} --sbayes R --ldm {bfile}.ldm.full \
-                        --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 \
-                        --gwas-summary {betahat_fname} --chain-length 10000 \
-                        --burn-in 2000  --out-freq 10 --out {bfile}'.split(),
-                            )
+        subprocess.call(
+        f'''{gctb_path} \
+        --bfile {bfile} \
+        --make-full-ldm \
+        --out {bfile}'''.split(),
+        )
+        
+        subprocess.call(
+        f'''{gctb_path} \
+        --sbayes R --ldm {bfile}.ldm.full \
+        --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 \
+        --gwas-summary {betahat_fname} --chain-length 10000 \
+        --burn-in 2000  --out-freq 10 --out {bfile}'''.split()
+        )
 
         to_log(args=args, string='converting SBayesR beta-hats')
-        sbayesr_betahat_list = [[0 for tree in ts_list_ref[chr_idx].trees() for site in tree.sites()] for chr_idx in range(args.n_chr)] # list of lists of beta-hats for each chromosome
+        sbayesr_betahat_list = [[0 for tree in ts_list_ref[chr_idx].trees() for site in tree.sites()] for chr_idx in range(args.n_chr)] # list of lists of beta-hats for SNPs on each chromosome, initialize all as zero
         with open(f'{bfile}.snpRes','r') as snpRes_file:
                 chr_idx = 0
                 snp_idx = 0
@@ -643,7 +679,7 @@ def run_SBayesR(args, gctb_path, bfile):
                         if i==0:
                                 continue
                         vals = line.split()
-			# NOTE: This depends on the snpRes file being sorted by chr and bp position
+                        # NOTE: This assumes the snpRes file is sorted by chr and bp position
                         while int(vals[2]) > chr_idx+1 and chr_idx<args.n_chr: # chrom is 3rd column in snpRes file
                                 chr_idx = int(vals[2])-1
                                 snp_idx = 0
@@ -1027,7 +1063,7 @@ if __name__ == '__main__':
         to_log(args=args, string=f'run gwas time: {round((dt.now()-start_run_gwas).seconds/60, 2)} min\n')
 
         # write beta-hats to file
-        # .ma file format: SNP A1 A2 freq b se p N
+        # .ma file format (required by SBayesR): SNP A1 A2 freq b se p N
         betahat_fname = 'betahat.ma'
         write_betahats(args=args,
                        ts_list=ts_list_gwas,
@@ -1044,10 +1080,12 @@ if __name__ == '__main__':
                        betahat_fname=betahat_fname, plink_path=plink_path)
         
         # run PLINK clumping and get 
-        plink_clumping(args=args, ts_list=ts_list_ref, bfile=bfile,
-                       betahat_fname=betahat_fname, plink_path=plink_path)
+        clumped_betahat_list = plink_clump(args=args, ts_list=ts_list_ref, bfile=bfile,
+                                              betahat_fname=betahat_fname, plink_path=plink_path,
+                                              betahat_list = betahat_A_list)
+        print(clumped_betahat_list)
+        assert False
         
-
         # run gctb and convert betas
         sbayesr_betahat_list = run_SBayesR(args=args, gctb_path=gctb_path, bfile=bfile)
 
@@ -1065,15 +1103,24 @@ if __name__ == '__main__':
                                ld_list=ld_list)
         to_log(args=args, string=f'prs-cs time: {round((dt.now()-start_prs_cs).seconds/60, 2)} min\n')
 
-
         # calculate beta/betahat and y/yhat correlations for unadjusted GWAS
-        to_log(args=args, string=f'\ncorr for unadjusted GWAS betas (m={m_total})')
+        to_log(args=args, string=f'\ncorr for unadj. betas (m={m_total})')
         calc_corr(args=args,
                   causal_idx_pheno_list=causal_idx_pheno_list,
                   causal_idx_list=causal_idx_test_list,
                   beta_est_list=betahat_A_list,
                   y_test=y_test,
                   ts_list_test=ts_list_test)
+        
+        # calculate beta/betahat and y/yhat correlations for clumped GWAS
+        to_log(args=args, string=f'\ncorr for clumped betas (m={m_total})')
+        calc_corr(args=args,
+                  causal_idx_pheno_list=causal_idx_pheno_list,
+                  causal_idx_list=causal_idx_test_list,
+                  beta_est_list=clumped_betahat_list,
+                  y_test=y_test,
+                  ts_list_test=ts_list_test)
+
 
     	# calculate beta/betahat and y/yhat correlations for SBayesR
         to_log(args=args, string=f'\ncorr for SBayesR (m={m_total})')
