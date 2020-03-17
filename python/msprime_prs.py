@@ -657,12 +657,13 @@ def run_SBayesR(args, gctb_path, bfile):
         )
         
         # NOTE: --pi values must add up to 1 and must match the number of values passed to gamma
+        # NOTE: cheat by starting hsq (heritability) with true heritability
         subprocess.call(
         f'''{gctb_path} \
         --sbayes R --ldm {bfile}.ldm.full \
         --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 \
         --gwas-summary {betahat_fname} --chain-length 10000 \
-        --hsq {args.h2_A} \ # cheat by starting hsq (heritability) with true heritability
+        --hsq {args.h2_A} \ 
         --burn-in 2000  --out-freq 10 --out {bfile}'''.split()
         )
 
