@@ -100,22 +100,16 @@ def get_downloads(args):
         if not Path(gctb_path).exists():
                 print(f'downloading gctb to {gctb_path}')
                 gctb_wget_url = 'https://cnsgenomics.com/software/gctb/download/gctb_2.0_Linux.zip'
-                try:
-                        subprocess.check_call(f'wget --quiet -nc {gctb_wget_url} -P {software_dir}'.split())
-                        subprocess.check_call(f'unzip -q {software_dir}/gctb_2.0_Linux.zip -d {software_dir}'.split())
-                except subprocess.CalledProcessError:
-                        print(f'gctb download failed')
+                subprocess.check_call(f'wget --quiet -nc {gctb_wget_url} -P {software_dir}'.split())
+                subprocess.check_call(f'unzip -q {software_dir}/gctb_2.0_Linux.zip -d {software_dir}'.split())
 
         # download plink
         plink_path = f'{software_dir }/plink'
         if not Path(plink_path).exists():
                 print(f'downloading plink to {plink_path}')
                 plink_wget_url = 'http://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20200219.zip'
-                try:
-                        subprocess.check_call(f'wget --quiet -nc {plink_wget_url} -P {software_dir}'.split())
-                        subprocess.check_call(f'unzip -q {software_dir}/plink_linux_x86_64_20200219.zip -d {software_dir}'.split())
-                except subprocess.CalledProcessError:
-                        print(f'plink download failed')
+                subprocess.check_call(f'wget --quiet -nc {plink_wget_url} -P {software_dir}'.split())
+                subprocess.check_call(f'unzip -q {software_dir}/plink_linux_x86_64_20200219.zip -d {software_dir}'.split())
 
         if args.rec_map:
                 if Path(args.rec_map.replace('@','1')).exists(): # only check chr 1
@@ -126,11 +120,8 @@ def get_downloads(args):
                         for chr_idx in range(args.n_chr):
                                 chr_recmap_wget_url = recmap_wget_url.replace("@",f"{chr_idx+1}")
                                 if not Path(f'{recmap_dir}/{chr_recmap_wget_url.split("/")[-1]}').exists():
-                                        try:
-                                                subprocess.check_call(f'wget --quiet -nc {chr_recmap_wget_url} -P {recmap_dir}'.split())
-                                                print(f'downloaded recmap for chr {chr_idx+1} (b37)')
-                                        except subprocess.CalledProcessError:
-                                                print(f'recmap download failed for chr {chr_idx+1}')
+                                        subprocess.check_call(f'wget --quiet -nc {chr_recmap_wget_url} -P {recmap_dir}'.split())
+                                        print(f'downloaded recmap for chr {chr_idx+1} (b37)')
                         rec_map_path = f'{recmap_dir}/{recmap_wget_url.split("/")[-1]}'
         else:
             rec_map_path = None
