@@ -570,14 +570,14 @@ def write_betahats(args, ts_list, beta_list, pval_list, se_list, betahat_fname):
                             betahat_file.write(f'{chr_idx+1}:{variant.site.position} {1} {0} {af} {betahat[snp_idx]} {se[snp_idx]} {pval[snp_idx]} {int(n_haps/2)}\n')
                             snp_idx += 1
 
-def _from_vcf(ts_list, bfile, betahat, plink_path, chr_idx):
+def _from_vcf(betahat, plink_path, chr_idx):
         r'''
         For parallelized exporting from VCF and updating bim file with SNP IDs
         '''
         chr_betahat = betahat[betahat.CHR==(chr_idx+1)].reset_index(drop=True)
         vcf_fname = f"{bfile}.chr{chr_idx+1}.vcf.gz"
         with gzip.open(vcf_fname , "wt") as vcf_file:
-                ts_list[chr_idx].write_vcf(vcf_file, ploidy=2, contig_id=f'{chr_idx+1}')
+                ts_list_ref[chr_idx].write_vcf(vcf_file, ploidy=2, contig_id=f'{chr_idx+1}')
         if args.n_chr > 1:
                 chr_bfile_fname = f'{bfile}.chr{chr_idx+1}'
         elif args.n_chr==1:
@@ -598,7 +598,8 @@ def write_to_plink(args, ts_list, bfile, betahat_fname, plink_path):
         betahat['CHR'] = betahat.SNP.str.split(':',expand=True)[0].astype(int)
         n_threads = cpu_count() # can set to be lower if needed
         pool = Pool(n_threads)
-        part_func = partial(_from_vcf, ts_list, bfile, betahat, plink_path) # allows passing multiple arguments to from_vcf when parallelized
+        # TODO: Find a way to pass multiple 
+        part_func = partial(_from_vcf, betahat, plink_path) # allows passing multiple arguments to from_vcf when parallelized
         chrs = range(args.n_chr) # list of chromosome indexes (0-indexed)
         pool.map(part_func, chrs) # parallelize    
         pool.close()
@@ -1064,6 +1065,7 @@ if __name__ == '__main__':
         bfile += f'mpc{args.m_per_chr}.nc{args.n_chr}.h2{args.h2_A}.'
         bfile += f'p{args.p_causal}.sam{args.sim_after_maf}.'
         bfile += f'rm{use_recmap}.s{args.seed}'
+        subprocess.call(f'rm {bfile}*'.split(), stderr=subprocess.DEVNULL) # remove existing files with this prefix
         betahat_fname = f'{bfile}.betahat.ma'
         write_betahats(args=args,
                        ts_list=ts_list_gwas,
