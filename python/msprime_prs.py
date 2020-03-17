@@ -1084,8 +1084,6 @@ if __name__ == '__main__':
         clumped_betahat_list = plink_clump(args=args, ts_list=ts_list_ref, bfile=bfile,
                                               betahat_fname=betahat_fname, plink_path=plink_path,
                                               betahat_list = betahat_A_list)
-        print(clumped_betahat_list)
-        assert False
         
         # run gctb and convert betas
         sbayesr_betahat_list = run_SBayesR(args=args, gctb_path=gctb_path, bfile=bfile)
