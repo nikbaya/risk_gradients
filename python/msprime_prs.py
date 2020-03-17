@@ -100,17 +100,21 @@ def get_downloads(args):
         if not Path(gctb_path).exists():
                 print(f'downloading gctb to {gctb_path}')
                 gctb_wget_url = 'https://cnsgenomics.com/software/gctb/download/gctb_2.0_Linux.zip'
-                subprocess.check_call(f'wget --quiet -nc {gctb_wget_url} -P {software_dir}'.split())
-                subprocess.check_call(f'unzip -q {software_dir}/gctb_2.0_Linux.zip -d {software_dir}'.split())
-
+                exit_code = subprocess.call(f'wget --quiet -nc {gctb_wget_url} -P {software_dir}'.split())
+                print('' if exit_code==0 else 'wget when downloading GCTB failed (exit code: {exit_code})')
+                exit_code = subprocess.call(f'unzip -q {software_dir}/gctb_2.0_Linux.zip -d {software_dir}'.split())
+                print('' if exit_code==0 else 'unzip when downloading GCTB failed (exit code: {exit_code})')
+                
         # download plink
         plink_path = f'{software_dir }/plink'
         if not Path(plink_path).exists():
                 print(f'downloading plink to {plink_path}')
                 plink_wget_url = 'http://s3.amazonaws.com/plink1-assets/plink_linux_x86_64_20200219.zip'
-                subprocess.check_call(f'wget --quiet -nc {plink_wget_url} -P {software_dir}'.split())
-                subprocess.check_call(f'unzip -q {software_dir}/plink_linux_x86_64_20200219.zip -d {software_dir}'.split())
-
+                exit_code = subprocess.call(f'wget --quiet -nc {plink_wget_url} -P {software_dir}'.split())
+                print('' if exit_code==0 else 'wget when downloading PLINK failed (exit code: {exit_code})')
+                exit_code = subprocess.call(f'unzip -q {software_dir}/plink_linux_x86_64_20200219.zip -d {software_dir}'.split())
+                print('' if exit_code==0 else 'unzip when downloading PLINK failed (exit code: {exit_code})')
+                
         if args.rec_map:
                 if Path(args.rec_map.replace('@','1')).exists(): # only check chr 1
                         rec_map_path = args.rec_map
@@ -120,8 +124,9 @@ def get_downloads(args):
                         for chr_idx in range(args.n_chr):
                                 chr_recmap_wget_url = recmap_wget_url.replace("@",f"{chr_idx+1}")
                                 if not Path(f'{recmap_dir}/{chr_recmap_wget_url.split("/")[-1]}').exists():
-                                        subprocess.check_call(f'wget --quiet -nc {chr_recmap_wget_url} -P {recmap_dir}'.split())
-                                        print(f'downloaded recmap for chr {chr_idx+1} (b37)')
+                                        exit_code = subprocess.call(f'wget --quiet -nc {chr_recmap_wget_url} -P {recmap_dir}'.split())
+                                        print(f'downloaded recmap for chr {chr_idx+1} (b37)' if exit_code==0 
+                                              else 'wget when downloading recmap for chr {chr_idx+1} failed (exit code: {exit_code})')
                         rec_map_path = f'{recmap_dir}/{recmap_wget_url.split("/")[-1]}'
         else:
             rec_map_path = None
