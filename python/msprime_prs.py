@@ -1059,7 +1059,12 @@ if __name__ == '__main__':
 
         # write beta-hats to file
         # .ma file format (required by SBayesR): SNP A1 A2 freq b se p N
-        betahat_fname = 'betahat.ma'
+        use_recmap = True if args.rec_map else False
+        bfile =  f'tmp_ng{args.n_gwas}.nt{args.n_test}.nr{args.n_ref}.' # bfile prefix of PLINK files of reference set; also used as uniq identifier for simulation
+        bfile += f'mpc{args.m_per_chr}.nc{args.n_chr}.h2{args.h2_A}.'
+        bfile += f'p{args.p_causal}.sam{args.sim_after_maf}.'
+        bfile += f'rm{use_recmap}.s{args.seed}'
+        betahat_fname = f'{bfile}.betahat.ma'
         write_betahats(args=args,
                        ts_list=ts_list_gwas,
                        beta_list=betahat_A_list,
@@ -1070,11 +1075,6 @@ if __name__ == '__main__':
         # For adding suffix to duplicates: https://groups.google.com/forum/#!topic/comp.lang.python/VyzA4ksBj24
 
         # write ref samples to PLINK
-        use_recmap = True if args.rec_map else False
-        bfile =  f'ng{args.n_gwas}.nt{args.n_test}.nr{args.n_ref}.' # bfile prefix of PLINK files of reference set
-        bfile += f'mpc{args.m_per_chr}.nc{args.n_chr}.h2{args.h2_A}.'
-        bfile += f'p{args.p_causal}.sam{args.sim_after_maf}.'
-        bfile += f'rm{use_recmap}.s{args.seed}'
         write_to_plink(args=args, ts_list=ts_list_ref, bfile=bfile,
                        betahat_fname=betahat_fname, plink_path=plink_path)
         
