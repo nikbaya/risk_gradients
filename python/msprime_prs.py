@@ -609,7 +609,7 @@ def write_to_plink(args, ts_list, bfile, betahat_fname, plink_path):
                 mergelist_fname=f'{bfile}.mergelist.txt'
                 with open(mergelist_fname,'w') as mergelist_file:
                         mergelist_file.write('\n'.join([f'{bfile}.chr{chr_idx+1}' for chr_idx in range(args.n_chr)]))
-                subprocess.call(f'{plink_path} --merge-list {mergelist_fname} --make-bed --out {bfile}'.split())
+                subprocess.call(f'{plink_path} --silent --merge-list {mergelist_fname} --make-bed --out {bfile}'.split())
                 
 def plink_clump(args, ts_list, bfile, betahat_fname, plink_path, betahat_list):
         r'''
@@ -671,14 +671,14 @@ def run_SBayesR(args, gctb_path, bfile):
         --burn-in 2000  --out-freq 10 --out {bfile}'''.split()
         )
         
-        # INFINITESIMAL
-        exit_code = subprocess.call(
-        f'''{gctb_path} \
-        --sbayes R --ldm {bfile}.ldm.full \
-        --pi 1 --gamma 1 \
-        --gwas-summary {betahat_fname} --chain-length 10000 \
-        --burn-in 2000  --out-freq 10 --out {bfile}'''.split()
-        )
+#        # INFINITESIMAL
+#        exit_code = subprocess.call(
+#        f'''{gctb_path} \
+#        --sbayes R --ldm {bfile}.ldm.full \
+#        --pi 1 --gamma 1 \
+#        --gwas-summary {betahat_fname} --chain-length 10000 \
+#        --burn-in 2000  --out-freq 10 --out {bfile}'''.split()
+#        )
         
         assert exit_code==0, f'SBayesR failed (exit code: {exit_code})' # NOTE: this might not actually be effective
 
