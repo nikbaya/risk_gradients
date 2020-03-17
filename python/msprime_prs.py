@@ -649,23 +649,25 @@ def run_SBayesR(args, gctb_path, bfile):
         r'''
         Run SBayesR on `bfile` and convert beta-hats
         '''
-        subprocess.call(
+        exit_code = subprocess.call(
         f'''{gctb_path} \
         --bfile {bfile} \
         --make-full-ldm \
         --out {bfile}'''.split(),
         )
+        assert exit_code==0, f'make-full-ldm failed (exit code: {exit_code})'
         
         # NOTE: --pi values must add up to 1 and must match the number of values passed to gamma
         # NOTE: cheat by starting hsq (heritability) with true heritability
-        subprocess.call(
+        exit_code = subprocess.call(
         f'''{gctb_path} \
         --sbayes R --ldm {bfile}.ldm.full \
         --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 \
         --gwas-summary {betahat_fname} --chain-length 10000 \
-        --hsq {args.h2_A} \ 
+        --hsq {args.h2_A} \
         --burn-in 2000  --out-freq 10 --out {bfile}'''.split()
         )
+        assert exit_code==0, f'SBayesR failed (exit code: {exit_code})' # NOTE: this might not actually be effective
 
         to_log(args=args, string='converting SBayesR beta-hats')
         sbayesr_betahat_list = [[0 for tree in ts_list_ref[chr_idx].trees() for site in tree.sites()] for chr_idx in range(args.n_chr)] # list of lists of beta-hats for SNPs on each chromosome, initialize all as zero
