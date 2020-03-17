@@ -574,7 +574,7 @@ def write_betahats(args, ts_list, beta_list, pval_list, se_list, betahat_fname):
                             betahat_file.write(f'{chr_idx+1}:{variant.site.position} {1} {0} {af} {betahat[snp_idx]} {se[snp_idx]} {pval[snp_idx]} {int(n_haps/2)}\n')
                             snp_idx += 1
 
-def _from_vcf(betahat, chr_idx):
+def _from_vcf(betahat, plink_path, chr_idx):
         r'''
         For parallelized exporting from VCF and updating bim file with SNP IDs
         '''
@@ -594,7 +594,7 @@ def _from_vcf(betahat, chr_idx):
         merged = merged[['CHR','SNP','CM','BP','A1','A2']]
         merged.to_csv(f'{chr_bfile_fname}.bim',sep='\t',index=False,header=False) # overwrite existing bim file
 
-def write_to_plink(args, ts_list, bfile, betahat_fname):
+def write_to_plink(args, ts_list, bfile, betahat_fname, plink_path):
         r'''
         Write ts_list files to bfile and merge across chromosomes if necessary
         '''
@@ -602,7 +602,7 @@ def write_to_plink(args, ts_list, bfile, betahat_fname):
         betahat['CHR'] = betahat.SNP.str.split(':',expand=True)[0].astype(int)
         n_threads = cpu_count() # can set to be lower if needed
         pool = Pool(n_threads)
-        part_func = partial(_from_vcf, betahat) # allows passing multiple arguments to from_vcf when parallelized
+        part_func = partial(_from_vcf, betahat, plink_path) # allows passing multiple arguments to from_vcf when parallelized
         chrs = range(args.n_chr) # list of chromosome indexes (0-indexed)
         pool.map(part_func, chrs) # parallelize    
         pool.close()
@@ -614,10 +614,12 @@ def write_to_plink(args, ts_list, bfile, betahat_fname):
                         mergelist_file.write('\n'.join([f'tmp_{bfile}.chr{chr_idx+1}' for chr_idx in range(args.n_chr)]))
                 subprocess.call(f'{plink_path} --merge-list {mergelist_fname} --make-bed --out {bfile}'.split())
                 
-def plink_clumping(args, ts_list, bfile, betahat_fname):
+def plink_clumping(args, ts_list, bfile, betahat_fname, plink_path):
         r'''
         Run PLINK --clump to get set of SNPs for PRS
         '''
+        subprocess.call(f'{plink_path} --bfile {bfile} --make-full-ldm --out {bfile}'.split())
+
 
 def run_SBayesR(args, gctb_path, bfile):
         r'''
@@ -1039,11 +1041,11 @@ if __name__ == '__main__':
         # write ref samples to PLINK
         bfile = 'ref' # bfile prefix of PLINK files of reference set
         write_to_plink(args=args, ts_list=ts_list_ref, bfile=bfile,
-                       betahat_fname=betahat_fname)
+                       betahat_fname=betahat_fname, plink_path=plink_path)
         
         # run PLINK clumping and get 
         plink_clumping(args=args, ts_list=ts_list_ref, bfile=bfile,
-                       betahat_fname=betahat_fname)
+                       betahat_fname=betahat_fname, plink_path=plink_path)
         
 
         # run gctb and convert betas
