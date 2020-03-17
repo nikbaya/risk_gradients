@@ -642,12 +642,10 @@ def plink_clump(args, ts_list, bfile, betahat_fname, plink_path, betahat_list):
         clumped = clumped.sort_values(by='BP') # sort by base pair position
         for chr_idx in range(args.n_chr):
                 chr_positions = [site.position for tree in ts_list_test[chr_idx].trees() for site in tree.sites()] # list of SNP positions in tree sequence
-                print(chr_positions)
                 chr_betahats = betahat_list[chr_idx]
                 chrom = chr_idx+1
                 clumped_chr = clumped[clumped['CHR']==chrom]
                 clumped_pos_list = clumped_chr['SNP'].str.split(':', expand=True)[1].astype('float').to_list() # split SNP IDs by ':', take the second half and keep position floats as list
-                print(clumped_pos_list)
                 clumped_betahat_list[chr_idx] = [(snp_betahat if chr_pos in clumped_pos_list else 0) for chr_pos,snp_betahat in zip(chr_positions, chr_betahats)]
         return clumped_betahat_list
 
