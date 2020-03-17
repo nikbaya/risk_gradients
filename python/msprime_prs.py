@@ -570,16 +570,16 @@ def write_betahats(args, ts_list, beta_list, pval_list, se_list, betahat_fname):
                             betahat_file.write(f'{chr_idx+1}:{variant.site.position} {1} {0} {af} {betahat[snp_idx]} {se[snp_idx]} {pval[snp_idx]} {int(n_haps/2)}\n')
                             snp_idx += 1
 
-def _from_vcf(betahat, plink_path, chr_idx):
+def _from_vcf(ts_list, bfile, betahat, plink_path, chr_idx):
         r'''
         For parallelized exporting from VCF and updating bim file with SNP IDs
         '''
         chr_betahat = betahat[betahat.CHR==(chr_idx+1)].reset_index(drop=True)
-        vcf_fname = f"tmp_ref.chr{chr_idx+1}.vcf.gz"
+        vcf_fname = f"{bfile}.chr{chr_idx+1}.vcf.gz"
         with gzip.open(vcf_fname , "wt") as vcf_file:
-                ts_list_ref[chr_idx].write_vcf(vcf_file, ploidy=2, contig_id=f'{chr_idx+1}')
+                ts_list[chr_idx].write_vcf(vcf_file, ploidy=2, contig_id=f'{chr_idx+1}')
         if args.n_chr > 1:
-                chr_bfile_fname = f'tmp_{bfile}.chr{chr_idx+1}'
+                chr_bfile_fname = f'{bfile}.chr{chr_idx+1}'
         elif args.n_chr==1:
                 chr_bfile_fname = bfile
         subprocess.call(f'{plink_path} --vcf {vcf_fname } --double-id --silent --make-bed --out {chr_bfile_fname}'.split())
@@ -598,7 +598,7 @@ def write_to_plink(args, ts_list, bfile, betahat_fname, plink_path):
         betahat['CHR'] = betahat.SNP.str.split(':',expand=True)[0].astype(int)
         n_threads = cpu_count() # can set to be lower if needed
         pool = Pool(n_threads)
-        part_func = partial(_from_vcf, betahat, plink_path) # allows passing multiple arguments to from_vcf when parallelized
+        part_func = partial(_from_vcf, ts_list, bfile, betahat, plink_path) # allows passing multiple arguments to from_vcf when parallelized
         chrs = range(args.n_chr) # list of chromosome indexes (0-indexed)
         pool.map(part_func, chrs) # parallelize    
         pool.close()
@@ -966,11 +966,9 @@ if __name__ == '__main__':
         ts_list_ref, ts_list_nonref = split(ts_list_both=ts_list_all,
                                             n1=args.n_ref)
 
-
-#######################
-## MAF filter before simulating phenotype
+        ## MAF filter before simulating phenotype
         if args.sim_after_maf:
-                # maf filter
+                # joint MAF filter ref and non-ref
                 ts_list_ref, ts_list_nonref = joint_maf_filter(ts_list_ref,
                                                                ts_list_nonref,
                                                                args=args,
@@ -992,7 +990,7 @@ if __name__ == '__main__':
                 ts_list_gwas, ts_list_test = split(ts_list_both=ts_list_nonref,
                                                    n1=args.n_gwas)
 
-                # MAF filter ref, gwas, and test cohorts
+                # joint MAF filter ref, gwas, and test cohorts
                 # TODO: remove necessity of passing args to this function to get n_chr
                 start_joint_maf = dt.now()
                 ts_list_ref, ts_list_gwas, ts_list_test = joint_maf_filter(ts_list_ref,
@@ -1000,9 +998,8 @@ if __name__ == '__main__':
                                                                            ts_list_test,
                                                                            args=args,
                                                                            maf=args.maf)
-   #     '''
-#######################
-## MAF filter after simulating phenotype (reduces PRS accuracy)
+
+        ## MAF filter after simulating phenotype (reduces PRS accuracy)
         else:
                 # simulate phenotype
                 start_sim_phen = dt.now()
@@ -1020,7 +1017,7 @@ if __name__ == '__main__':
                 ts_list_gwas, ts_list_test = split(ts_list_both=ts_list_nonref,
                                                    n1=args.n_gwas)
 
-                # MAF filter ref, gwas, and test cohorts
+                # joint MAF filter ref, gwas, and test cohorts
                 # TODO: remove necessity of passing args to this function to get n_chr
                 start_joint_maf = dt.now()
                 ts_list_ref, ts_list_gwas, ts_list_test = joint_maf_filter(ts_list_ref,
@@ -1028,8 +1025,6 @@ if __name__ == '__main__':
                                                                            ts_list_test,
                                                                            args=args,
                                                                            maf=args.maf)
-
-#########################
 
         # get causal variant indices for the GWAS cohort
         causal_idx_pheno_gwas_list = get_shared_var_idxs(ts_pheno_A_list, ts_list_nonref)
@@ -1075,7 +1070,11 @@ if __name__ == '__main__':
         # For adding suffix to duplicates: https://groups.google.com/forum/#!topic/comp.lang.python/VyzA4ksBj24
 
         # write ref samples to PLINK
-        bfile = 'ref' # bfile prefix of PLINK files of reference set
+        use_recmap = True if args.rec_map else False
+        bfile =  f'ng{args.n_gwas}.nt{args.n_test}.nr{args.n_ref}.' # bfile prefix of PLINK files of reference set
+        bfile += f'mpc{args.m_per_chr}.nc{args.n_chr}.h2{args.h2_A}.'
+        bfile += f'p{args.p_causal}.sam{args.sim_after_maf}.'
+        bfile += f'rm{use_recmap}.s{args.seed}'
         write_to_plink(args=args, ts_list=ts_list_ref, bfile=bfile,
                        betahat_fname=betahat_fname, plink_path=plink_path)
         
