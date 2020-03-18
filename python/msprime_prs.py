@@ -60,6 +60,8 @@ parser.add_argument('--rec_map', default=False, type=str,
         help='If you want to pass a recombination map, include the filepath here. '
         'The filename should contain the symbol @, msprimesim will replace instances '
         'of @ with chromosome numbers.')
+parser.add_argument('--sbrprior', default='def', type=str,
+        help='Which prior to use for SBayesR. Options: def, ss, inf (default=def)')
 parser.add_argument('--seed', default=None, type=int,
         help='Seed for replicability. Must be between 1 and (2^32)-1') # random seed is changed for each chromosome when calculating true SNP effects
 parser.add_argument('--verbose', '-v', action='store_true', default=False,
@@ -564,6 +566,7 @@ def write_betahats(args, ts_list, beta_list, pval_list, se_list, betahat_fname):
                     pval = pval_list[chr_idx]
                     se = se_list[chr_idx]
                     snp_idx = 0
+                    assert len(betahat)==len([v for v in ts_list[chr_idx].variants()])
                     for k, variant in enumerate(ts_list[chr_idx].variants()): 
                             gt = (np.array(variant.genotypes[0::2].astype(int)) + np.array(variant.genotypes[1::2].astype(int)))
                             af = np.mean(gt)/2 # frequency of non-ancestral allele (note: non-ancestral allele is effect allele, denoted as '1' in the A1 field)
@@ -646,39 +649,50 @@ def plink_clump(args, ts_list, bfile, betahat_fname, plink_path, betahat_list):
                 clumped_betahat_list[chr_idx] = [(snp_betahat if chr_pos in clumped_pos_list else 0) for chr_pos,snp_betahat in zip(chr_positions, chr_betahats)]
         return clumped_betahat_list
 
-def run_SBayesR(args, gctb_path, bfile):
+def run_SBayesR(args, gctb_path, bfile, ldm_type='sparse'):
         r'''
         Run SBayesR on `bfile` and convert beta-hats
         '''
+        assert ldm_type in {'sparse','full'}, f'ldm_type={ldm_type} not valid'
+        
         exit_code = subprocess.call(
         f'''{gctb_path} \
         --bfile {bfile} \
-        --make-full-ldm \
+        --make-{ldm_type}-ldm \
         --out {bfile}'''.split(),
         )
-        assert exit_code==0, f'make-full-ldm failed (exit code: {exit_code})'
+        assert exit_code==0, f'make-{ldm_type}-ldm failed (exit code: {exit_code})'
         
         # NOTE: --pi values must add up to 1 and must match the number of values passed to gamma
         # NOTE: can cheat by starting hsq (heritability) with true heritability by adding the following line
         # --hsq {args.h2_A} \
-        
-        # DEFAULT
-        exit_code = subprocess.call(
-        f'''{gctb_path} \
-        --sbayes R --ldm {bfile}.ldm.full \
-        --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 \
-        --gwas-summary {betahat_fname} --chain-length 10000 \
-        --burn-in 2000  --out-freq 10 --out {bfile}'''.split()
-        )
-        
-#        # INFINITESIMAL
-#        exit_code = subprocess.call(
-#        f'''{gctb_path} \
-#        --sbayes R --ldm {bfile}.ldm.full \
-#        --pi 1 --gamma 1 \
-#        --gwas-summary {betahat_fname} --chain-length 10000 \
-#        --burn-in 2000  --out-freq 10 --out {bfile}'''.split()
-#        )
+        if args.sbrprior == 'default':
+            # Default 
+            exit_code = subprocess.call(
+            f'''{gctb_path} \
+            --sbayes R --ldm {bfile}.ldm.{ldm_type} \
+            --pi 0.95,0.02,0.02,0.01 --gamma 0.0,0.01,0.1,1 \
+            --gwas-summary {betahat_fname} --chain-length 10000 \
+            --burn-in 2000  --out-freq 10 --out {bfile}'''.split()
+            )
+        elif args.sbrprior == 'inf':
+            # Infinitesimal prior
+            exit_code = subprocess.call(
+            f'''{gctb_path} \
+            --sbayes R --ldm {bfile}.ldm.{ldm_type} \
+            --pi 1, --gamma 1, \
+            --gwas-summary {betahat_fname} --chain-length 10000 \
+            --burn-in 2000  --out-freq 10 --out {bfile}'''.split()
+            )
+        elif args.sbrprior == 'ss':
+            # Spike & slab prior
+            exit_code = subprocess.call(
+            f'''{gctb_path} \
+            --sbayes R --ldm {bfile}.ldm.{ldm_type} \
+            --pi 0.95,0.05 --gamma 0,1 \
+            --gwas-summary {betahat_fname} --chain-length 10000 \
+            --burn-in 2000  --out-freq 10 --out {bfile}'''.split()
+            )
         
         assert exit_code==0, f'SBayesR failed (exit code: {exit_code})' # NOTE: this might not actually be effective
 
@@ -963,6 +977,8 @@ if __name__ == '__main__':
 
         to_log(args=args, string=f'start time: {dt.now().strftime("%d/%m/%Y %H:%M:%S")}')
         to_log(args=args, string=args)
+        
+        assert args.sbrprior in ['def','inf','ss'], 'ERROR: --sbrprior {args.sbrprior} is not allowed'
 
         # TODO: Consider adding argument for proportion of genome that is genotyped
 
@@ -1089,14 +1105,18 @@ if __name__ == '__main__':
         # For adding suffix to duplicates: https://groups.google.com/forum/#!topic/comp.lang.python/VyzA4ksBj24
 
         # write ref samples to PLINK
+        to_log(args=args, string=f'writing ref samples to PLINK')
         write_to_plink(args=args, ts_list=ts_list_ref, bfile=bfile,
                        betahat_fname=betahat_fname, plink_path=plink_path)
         
-        # run PLINK clumping and get 
+        # run PLINK clumping and get betahats
+        start_plink_clump = dt.now()
+        to_log(args=args, string=f'running PLINK clumping')
         clumped_betahat_list = plink_clump(args=args, ts_list=ts_list_ref, bfile=bfile,
                                               betahat_fname=betahat_fname, plink_path=plink_path,
                                               betahat_list = betahat_A_list)
-        
+        to_log(args=args, string=f'plink_clump time: {round((dt.now()-start_plink_clump).seconds/60, 2)} min\n')
+
         # run gctb and convert betas
         sbayesr_betahat_list = run_SBayesR(args=args, gctb_path=gctb_path, bfile=bfile)
 
@@ -1151,6 +1171,6 @@ if __name__ == '__main__':
                   y_test=y_test,
                   ts_list_test=ts_list_test)
 
-        to_log(args=args, string=f'total time (min): {round((dt.now()-start_sim_ts).seconds/60, 2)}\n')
+        to_log(args=args, string=f'total time: {round((dt.now()-start_sim_ts).seconds/60, 2)} min\n')
 
         to_log(args=args, string=args)
