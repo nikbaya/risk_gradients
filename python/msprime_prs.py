@@ -281,6 +281,7 @@ def sim_ts(args, rec_map_path):
 #                                        migration_matrix=migration_mat,
 #                                        demographic_events=demographic_events)
 #        dp.print_history()
+        
         for chr_idx in range(args.n_chr):
                 random_seed = (args.seed+chr_idx) % 2**32 if args.seed is not None else args.seed # must be less than 2^32
                 ts_list_all.append(msprime.simulate(sample_size=None, #set to None because sample_size info is stored in pop_configs
@@ -599,12 +600,12 @@ def write_to_plink(args, ts_list, bfile, betahat_fname, plink_path):
         '''
         betahat = pd.read_csv(betahat_fname, delim_whitespace=True)
         betahat['CHR'] = betahat.SNP.str.split(':',expand=True)[0].astype(int)
+        _from_vcf_map = partial(_from_vcf, betahat, plink_path) # allows passing multiple arguments to from_vcf when parallelized
         n_threads = cpu_count() # can set to be lower if needed
         pool = Pool(n_threads)
-        # TODO: Find a way to pass multiple 
-        part_func = partial(_from_vcf, betahat, plink_path) # allows passing multiple arguments to from_vcf when parallelized
-        chrs = range(args.n_chr) # list of chromosome indexes (0-indexed)
-        pool.map(part_func, chrs) # parallelize    
+        # TODO: Find a way to pass all args to limit scope of _from_vcf
+        chrom_idxs = range(args.n_chr) # list of chromosome indexes (0-indexed)
+        pool.map(_from_vcf_map, chrom_idxs) # parallelize    
         pool.close()
         pool.join()
         
@@ -772,170 +773,181 @@ def calc_ld(args, ts_list_ref):
                 ld_list.append([ld])
         return ld_list
 
-def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
-        r'''
-        Use PRS-CS to calculate adjusted beta-hats
-        '''
-        def _psi(x, alpha, lam):
-                f = -alpha*(math.cosh(x)-1)-lam*(math.exp(x)-x-1)
-                return f
+def _psi(x, alpha, lam):
+        f = -alpha*(math.cosh(x)-1)-lam*(math.exp(x)-x-1)
+        return f
 
-        def _dpsi(x, alpha, lam):
-                f = -alpha*math.sinh(x)-lam*(math.exp(x)-1)
-                return f
+def _dpsi(x, alpha, lam):
+        f = -alpha*math.sinh(x)-lam*(math.exp(x)-1)
+        return f
 
-        def _g(x, sd, td, f1, f2):
-                if (x >= -sd) and (x <= td):
-                        f = 1
-                elif x > td:
-                        f = f1
-                elif x < -sd:
-                        f = f2
+def _g(x, sd, td, f1, f2):
+        if (x >= -sd) and (x <= td):
+                f = 1
+        elif x > td:
+                f = f1
+        elif x < -sd:
+                f = f2
 
-                return f
+        return f
 
-        def gigrnd(p, a, b):
-                # setup -- sample from the two-parameter version gig(lam,omega)
-                p = float(p); a = float(a); b = float(b)
-                lam = p
-                omega = math.sqrt(a*b)
+def _gigrnd(p, a, b):
+        # setup -- sample from the two-parameter version gig(lam,omega)
+        p = float(p); a = float(a); b = float(b)
+        lam = p
+        omega = math.sqrt(a*b)
 
-                if lam < 0:
-                        lam = -lam
-                        swap = True
+        if lam < 0:
+                lam = -lam
+                swap = True
+        else:
+                swap = False
+
+        alpha = math.sqrt(math.pow(omega,2)+math.pow(lam,2))-lam
+
+        # find t
+        x = -_psi(1, alpha, lam)
+        if (x >= 1/2) and (x <= 2):
+                t = 1
+        elif x > 2:
+                t = math.sqrt(2/(alpha+lam))
+        elif x < 1/2:
+                t = math.log(4/(alpha+2*lam))
+
+        # find s
+        x = -_psi(-1, alpha, lam)
+        if (x >= 1/2) and (x <= 2):
+                s = 1
+        elif x > 2:
+                s = math.sqrt(4/(alpha*math.cosh(1)+lam))
+        elif x < 1/2:
+                s = min(1/lam, math.log(1+1/alpha+math.sqrt(1/math.pow(alpha,2)+2/alpha)))
+
+        # find auxiliary parameters
+        eta = -_psi(t, alpha, lam)
+        zeta = -_dpsi(t, alpha, lam)
+        theta = -_psi(-s, alpha, lam)
+        xi = _dpsi(-s, alpha, lam)
+
+        p = 1/xi
+        r = 1/zeta
+
+        td = t-r*eta
+        sd = s-p*theta
+        q = td+sd
+
+        # random variate generation
+        while True:
+                U = random.random()
+                V = random.random()
+                W = random.random()
+                if U < q/(p+q+r):
+                        rnd = -sd+q*V
+                elif U < (q+r)/(p+q+r):
+                        rnd = td-r*math.log(V)
                 else:
-                        swap = False
+                        rnd = -sd+p*math.log(V)
 
-                alpha = math.sqrt(math.pow(omega,2)+math.pow(lam,2))-lam
+                f1 = math.exp(-eta-zeta*(rnd-t))
+                f2 = math.exp(-theta+xi*(rnd+s))
+                if W*_g(rnd, sd, td, f1, f2) <= math.exp(_psi(rnd, alpha, lam)):
+                        break
 
-                # find t
-                x = -_psi(1, alpha, lam)
-                if (x >= 1/2) and (x <= 2):
-                        t = 1
-                elif x > 2:
-                        t = math.sqrt(2/(alpha+lam))
-                elif x < 1/2:
-                        t = math.log(4/(alpha+2*lam))
+        # transform back to the three-parameter version gig(p,a,b)
+        rnd = math.exp(rnd)*(lam/omega+math.sqrt(1+math.pow(lam,2)/math.pow(omega,2)))
+        if swap:
+                rnd = 1/rnd
 
-                # find s
-                x = -_psi(-1, alpha, lam)
-                if (x >= 1/2) and (x <= 2):
-                        s = 1
-                elif x > 2:
-                        s = math.sqrt(4/(alpha*math.cosh(1)+lam))
-                elif x < 1/2:
-                        s = min(1/lam, math.log(1+1/alpha+math.sqrt(1/math.pow(alpha,2)+2/alpha)))
+        rnd = rnd/math.sqrt(a/b)
+        return rnd
 
-                # find auxiliary parameters
-                eta = -_psi(t, alpha, lam)
-                zeta = -_dpsi(t, alpha, lam)
-                theta = -_psi(-s, alpha, lam)
-                xi = _dpsi(-s, alpha, lam)
+def _mcmc(args, sst_dict_list, ld_list, chrom_idx):
+        sst_dict = sst_dict_list[chrom_idx]
+        ld_blk = ld_list[chrom_idx]
+        blk_size = [len(blk) for blk in ld_blk]
+        
+        a = 1
+        b = 0.5
+        phi = None
+        n = args.n_gwas
+        n_iter = 1000
+        n_burnin = 500
+        thin = 5
+        beta_std = True
+        seed = args.seed
+        
+        chrom=chrom_idx+1
+        
+        to_log(args=args, string=f'... MCMC (chr{chrom})...')
 
-                p = 1/xi
-                r = 1/zeta
+        # seed
+        if seed != None:
+                random.seed(seed)
 
-                td = t-r*eta
-                sd = s-p*theta
-                q = td+sd
-
-                # random variate generation
-                while True:
-                        U = random.random()
-                        V = random.random()
-                        W = random.random()
-                        if U < q/(p+q+r):
-                                rnd = -sd+q*V
-                        elif U < (q+r)/(p+q+r):
-                                rnd = td-r*math.log(V)
-                        else:
-                                rnd = -sd+p*math.log(V)
-
-                        f1 = math.exp(-eta-zeta*(rnd-t))
-                        f2 = math.exp(-theta+xi*(rnd+s))
-                        if W*_g(rnd, sd, td, f1, f2) <= math.exp(_psi(rnd, alpha, lam)):
-                                break
-
-                # transform back to the three-parameter version gig(p,a,b)
-                rnd = math.exp(rnd)*(lam/omega+math.sqrt(1+math.pow(lam,2)/math.pow(omega,2)))
-                if swap:
-                        rnd = 1/rnd
-
-                rnd = rnd/math.sqrt(a/b)
-                return rnd
-
-        def mcmc(a, b, phi, sst_dict, n, ld_blk, blk_size, n_iter, n_burnin, thin,
-                 chrom, beta_std, seed, args):
-                to_log(args=args, string=f'... MCMC (chr{chrom})...')
-
-                # seed
-                if seed != None:
-                        random.seed(seed)
-
-                # derived stats
-                beta_mrg = np.array(sst_dict['BETA']).T
-                beta_mrg = np.expand_dims(beta_mrg, axis=1)
-                maf = np.array(sst_dict['MAF']).T
-                n_pst = (n_iter-n_burnin)/thin
+        # derived stats
+        beta_mrg = np.array(sst_dict['BETA']).T
+        beta_mrg = np.expand_dims(beta_mrg, axis=1)
+        maf = np.array(sst_dict['MAF']).T
+        n_pst = (n_iter-n_burnin)/thin
 #                p = len(sst_dict['SNP'])
-                p = len(sst_dict['BETA'])
-                n_blk = len(ld_blk)
+        p = len(sst_dict['BETA'])
+        n_blk = len(ld_blk)
 
-                # initialization
-                beta = np.zeros((p,1))
-                psi = np.ones((p,1))
-                sigma = 1.0
-                if phi == None:
-                        phi = 1.0; phi_updt = True
-                else:
-                        phi_updt = False
+        # initialization
+        beta = np.zeros((p,1))
+        psi = np.ones((p,1))
+        sigma = 1.0
+        if phi == None:
+                phi = 1.0; phi_updt = True
+        else:
+                phi_updt = False
 
-                beta_est = np.zeros((p,1))
-                psi_est = np.zeros((p,1))
-                sigma_est = 0.0
-                phi_est = 0.0
+        beta_est = np.zeros((p,1))
+        psi_est = np.zeros((p,1))
+        sigma_est = 0.0
+        phi_est = 0.0
 
-                # MCMC
-                for itr in range(1,n_iter+1):
+        # MCMC
+        for itr in range(1,n_iter+1):
 #                        if itr % 100 == 0:
 #                                to_log(args=args, string='--- iter-' + str(itr) + ' ---')
 
-                        mm = 0; quad = 0.0
-                        for kk in range(n_blk):
-                                if blk_size[kk] == 0:
-                                        continue
-                                else:
-                                        idx_blk = range(mm,mm+blk_size[kk])
-                                        dinvt = ld_blk[kk]+np.diag(1.0/psi[idx_blk].T[0])
-                                        dinvt_chol = linalg.cholesky(dinvt)
-                                        beta_tmp = linalg.solve_triangular(dinvt_chol, beta_mrg[idx_blk], trans='T') + np.sqrt(sigma/n)*random.randn(len(idx_blk),1)
-                                        beta[idx_blk] = linalg.solve_triangular(dinvt_chol, beta_tmp, trans='N')
-                                        quad += np.dot(np.dot(beta[idx_blk].T, dinvt), beta[idx_blk])
-                                        mm += blk_size[kk]
+                mm = 0; quad = 0.0
+                for kk in range(n_blk):
+                        if blk_size[kk] == 0:
+                                continue
+                        else:
+                                idx_blk = range(mm,mm+blk_size[kk])
+                                dinvt = ld_blk[kk]+np.diag(1.0/psi[idx_blk].T[0])
+                                dinvt_chol = linalg.cholesky(dinvt)
+                                beta_tmp = linalg.solve_triangular(dinvt_chol, beta_mrg[idx_blk], trans='T') + np.sqrt(sigma/n)*random.randn(len(idx_blk),1)
+                                beta[idx_blk] = linalg.solve_triangular(dinvt_chol, beta_tmp, trans='N')
+                                quad += np.dot(np.dot(beta[idx_blk].T, dinvt), beta[idx_blk])
+                                mm += blk_size[kk]
 
-                        err = max(n/2.0*(1.0-2.0*sum(beta*beta_mrg)+quad), n/2.0*sum(beta**2/psi))
-                        sigma = 1.0/random.gamma((n+p)/2.0, 1.0/err)
+                err = max(n/2.0*(1.0-2.0*sum(beta*beta_mrg)+quad), n/2.0*sum(beta**2/psi))
+                sigma = 1.0/random.gamma((n+p)/2.0, 1.0/err)
 
-                        delta = random.gamma(a+b, 1.0/(psi+phi))
+                delta = random.gamma(a+b, 1.0/(psi+phi))
 
-                        for jj in range(p):
-                                psi[jj] = gigrnd(a-0.5, 2.0*delta[jj], n*beta[jj]**2/sigma)
-                        psi[psi>1] = 1.0
+                for jj in range(p):
+                        psi[jj] = _gigrnd(a-0.5, 2.0*delta[jj], n*beta[jj]**2/sigma)
+                psi[psi>1] = 1.0
 
-                        if phi_updt == True:
-                                w = random.gamma(1.0, 1.0/(phi+1.0))
-                                phi = random.gamma(p*b+0.5, 1.0/(sum(delta)+w))
+                if phi_updt == True:
+                        w = random.gamma(1.0, 1.0/(phi+1.0))
+                        phi = random.gamma(p*b+0.5, 1.0/(sum(delta)+w))
 
-                        # posterior
-                        if (itr>n_burnin) and (itr % thin == 0):
-                                beta_est = beta_est + beta/n_pst
-                                psi_est = psi_est + psi/n_pst
-                                sigma_est = sigma_est + sigma/n_pst
-                                phi_est = phi_est + phi/n_pst
+                # posterior
+                if (itr>n_burnin) and (itr % thin == 0):
+                        beta_est = beta_est + beta/n_pst
+                        psi_est = psi_est + psi/n_pst
+                        sigma_est = sigma_est + sigma/n_pst
+                        phi_est = phi_est + phi/n_pst
 
-                # convert standardized beta to per-allele beta
-                if beta_std == 'False':
-                        beta_est /= np.sqrt(2.0*maf*(1.0-maf))
+        # convert standardized beta to per-allele beta
+        if beta_std == 'False':
+                beta_est /= np.sqrt(2.0*maf*(1.0-maf))
 
 #                # write posterior effect sizes
 #                if phi_updt == True:
@@ -947,34 +959,40 @@ def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
 #                        for snp, bp, a1, a2, beta in zip(sst_dict['SNP'], sst_dict['BP'], sst_dict['A1'], sst_dict['A2'], beta_est):
 #                                ff.write('%d\t%s\t%d\t%s\t%s\t%.6e\n' % (chrom, snp, bp, a1, a2, beta))
 
-                # print estimated phi
+        # print estimated phi
 #                if phi_updt == True:
 #                        to_log(args=args, string='... Estimated global shrinkage parameter: %1.2e ...' % phi_est )
 
 #                to_log(args=args, string='... Done ...')
-                return beta_est
+        return beta_est
 
-        a = 1; b = 0.5
-        phi = None
-        n = args.n_gwas
-        n_iter = 1000
-        n_burnin = 500
-        thin = 5
-        beta_std = True
-        seed = args.seed
+def prs_cs(args, betahat_A_list, maf_A_list, ld_list):
+        r'''
+        Use PRS-CS to calculate adjusted beta-hats
+        '''
 
         sst_dict_list = [{'BETA':betahat_A_list[chr_idx], 'MAF':maf_A_list[chr_idx]}
                                          for chr_idx in range(args.n_chr)]
 
-        beta_est_list = []
-        for chr_idx in range(args.n_chr):
-                sst_dict = sst_dict_list[chr_idx]
-                ld_blk = ld_list[chr_idx]
-                blk_size = [len(blk) for blk in ld_blk]
-                beta_est = mcmc(a, b, phi, sst_dict, n, ld_blk, blk_size,
-                                  n_iter, n_burnin, thin, chr_idx+1,
-                                  beta_std, seed, args=args)
-                beta_est_list.append(beta_est)
+#        beta_est_list = []
+#        for chr_idx in range(args.n_chr):
+#                sst_dict = sst_dict_list[chr_idx]
+#                ld_blk = ld_list[chr_idx]
+#                blk_size = [len(blk) for blk in ld_blk]
+#                beta_est = mcmc(a, b, phi, sst_dict, n, ld_blk, blk_size,
+#                                  n_iter, n_burnin, thin, chr_idx+1,
+#                                  beta_std, seed, args=args)
+#                beta_est_list.append(beta_est)
+        
+        mcmc_map = partial(_mcmc, args, sst_dict_list, ld_list)
+
+        n_threads = cpu_count() # can set to be lower if needed
+        pool = Pool(n_threads)
+        chrom_idxs = range(args.n_chr) # list of chromosome indexes (0-indexed)
+        beta_est_list = pool.map(mcmc_map, chrom_idxs) # parallelize    
+        pool.close()
+        pool.join()
+        
         return beta_est_list
 
 if __name__ == '__main__':
@@ -1145,11 +1163,16 @@ if __name__ == '__main__':
         to_log(args=args, string=f'calc ld time: {round((dt.now()-start_calc_ld).seconds/60, 2)} min\n')
 
         # run PRS-CS
+        # TODO: Figure out ZeroDivisionError at s = min(1/lam, math.log(1+1/alpha+math.sqrt(1/math.pow(alpha,2)+2/alpha)))
         start_prs_cs = dt.now()
-        prscs_betahat_list = prs_cs(args=args,
-                               betahat_A_list=betahat_A_list,
-                               maf_A_list=maf_A_list,
-                               ld_list=ld_list)
+        try:
+            prscs_betahat_list = prs_cs(args=args,
+                                   betahat_A_list=betahat_A_list,
+                                   maf_A_list=maf_A_list,
+                                   ld_list=ld_list)
+        except ZeroDivisionError:
+            print('\nPRS-CS failed due to ZeroDivisionError\n')
+            
         to_log(args=args, string=f'prs-cs time: {round((dt.now()-start_prs_cs).seconds/60, 2)} min\n')
 
         # calculate beta/betahat and y/yhat correlations for unadjusted GWAS
@@ -1171,7 +1194,7 @@ if __name__ == '__main__':
                   ts_list_test=ts_list_test)
 
 
-    	# calculate beta/betahat and y/yhat correlations for SBayesR
+        # calculate beta/betahat and y/yhat correlations for SBayesR
         if args.sbr and sbr_successful:
             to_log(args=args, string=f'\ncorr for SBayesR (m={m_total})')
             calc_corr(args=args,
