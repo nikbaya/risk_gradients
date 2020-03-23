@@ -11,6 +11,9 @@ conda activate msprime # activate msprime environment
 conda install -y -c conda-forge msprime=0.7.4 # install msprime Python package
 wget -O msprime_prs.py https://raw.githubusercontent.com/nikbaya/risk_gradients/master/python/msprime_prs.py && chmod +x msprime_prs.py
 
+
+Version w/ serial PRS-CS:
+wget -O msprime_prs_serial.py https://raw.githubusercontent.com/nikbaya/risk_gradients/9ce534ee27ed1929fbdf5c88e6dfa067db8002e4/python/msprime_prs.py && chmod +x msprime_prs_serial.py
 @author: nbaya
 """
 
@@ -28,6 +31,8 @@ import subprocess
 import pandas as pd
 from multiprocessing import Pool, cpu_count
 from functools import partial
+import tskit # installed with msprime, v0.2.3
+
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--n_gwas', default=10000, type=int,
@@ -410,8 +415,6 @@ def sim_phen(args, n_pops, ts_list, m_total):
         for chr_idx in range(args.n_chr):
                 ts = ts_list[chr_idx]
                 ts = get_common_mutations_ts(ts, maf=0, args=args)
-                # to_log(args=args, string=f'picking causal variants and determining effect sizes in chromosome {chr_idx+1}')
-                # to_log(args=args, string=f'p-causal is {args.p_causal}')
                 ts_pheno_A, m_causal_A, causal_A_idx = set_mutations_in_tree(ts, args.p_causal)
                 m_chr = int(ts.get_num_mutations())
                 to_log(args=args, string=f'chr {chr_idx+1} causal: {m_causal_A}/{m_chr}')
@@ -448,7 +451,7 @@ def sim_phen(args, n_pops, ts_list, m_total):
         return y, beta_A_list, ts_pheno_A_list, causal_A_idx_list
 
 
-def joint_maf_filter(*ts_lists, args, maf=0.05, logfile=None):
+def joint_maf_filter(*ts_lists, args, maf=0.05):
         r'''
         Filter to SNPs with MAF>`maf` in all tree sequence lists passed
         by the `ts_lists`
@@ -614,15 +617,13 @@ def write_to_plink(args, ts_list, bfile, betahat_fname, plink_path):
                 with open(mergelist_fname,'w') as mergelist_file:
                         mergelist_file.write('\n'.join([f'{bfile}.chr{chr_idx+1}' for chr_idx in range(args.n_chr)]))
                 subprocess.call(f'{plink_path} --silent --merge-list {mergelist_fname} --make-bed --out {bfile}'.split())
-                
-def plink_clump(args, ts_list, bfile, betahat_fname, plink_path, betahat_list):
-        r'''
-        Run PLINK --clump to get set of SNPs for PRS
-        '''
-        clump_p1 = 1
+
+def _plink_clump(args, bfile, betahat_fname, plink_path, betahat_list, pval_thresh):
+        clump_p1 = pval_thresh
         clump_p2 = 1
         clump_r2 = 0.1
         clump_kb = 500
+        out = f'{bfile}.pval_{pval_thresh}'
         exit_code = subprocess.call( # get exit code
         f'''{plink_path} \
         --silent \
@@ -633,22 +634,42 @@ def plink_clump(args, ts_list, bfile, betahat_fname, plink_path, betahat_list):
         --clump-p2 {clump_p2} \
         --clump-r2 {clump_r2} \
         --clump-kb {clump_kb} \
-        --out {bfile}'''.split())
+        --out {out}'''.split())
         
         assert exit_code==0, f'PLINK clumping failed, exit code: {exit_code}'
         
-        to_log(args=args, string='converting PLINK --clump results into beta-hats')
-        clumped_betahat_list = [[0 for tree in ts_list_ref[chr_idx].trees() for site in tree.sites()] for chr_idx in range(args.n_chr)] # list of lists of beta-hats for SNPs on each chromosome, initialize all as zero
-        clumped = pd.read_csv(f'{bfile}.clumped', delim_whitespace=True) # initially sorted by SNP significance
-        clumped = clumped.sort_values(by='BP') # sort by base pair position
-        for chr_idx in range(args.n_chr):
-                chr_positions = [site.position for tree in ts_list_test[chr_idx].trees() for site in tree.sites()] # list of SNP positions in tree sequence
-                chr_betahats = betahat_list[chr_idx]
-                chrom = chr_idx+1
-                clumped_chr = clumped[clumped['CHR']==chrom]
-                clumped_pos_list = clumped_chr['SNP'].str.split(':', expand=True)[1].astype('float').to_list() # split SNP IDs by ':', take the second half and keep position floats as list
-                clumped_betahat_list[chr_idx] = [(snp_betahat if chr_pos in clumped_pos_list else 0) for chr_pos,snp_betahat in zip(chr_positions, chr_betahats)]
+        to_log(args=args, string=f'converting PLINK --clump results into beta-hats (pval_thresh={pval_thresh})')
+        try:
+            clumped = pd.read_csv(f'{out}.clumped', delim_whitespace=True) # initially sorted by SNP significance
+            clumped = clumped.sort_values(by='BP') # sort by base pair position
+            clumped_betahat_list = [[0 for tree in ts_list_ref[chr_idx].trees() for site in tree.sites()] for chr_idx in range(args.n_chr)] # list of lists of beta-hats for SNPs on each chromosome, initialize all as zero
+            for chr_idx in range(args.n_chr):
+                    chr_positions = [site.position for tree in ts_list_test[chr_idx].trees() for site in tree.sites()] # list of SNP positions in tree sequence
+                    chr_betahats = betahat_list[chr_idx]
+                    chrom = chr_idx+1
+                    clumped_chr = clumped[clumped['CHR']==chrom]
+                    clumped_pos_list = clumped_chr['SNP'].str.split(':', expand=True)[1].astype('float').to_list() # split SNP IDs by ':', take the second half and keep position floats as list
+                    clumped_betahat_list[chr_idx] = [(snp_betahat if chr_pos in clumped_pos_list else 0) for chr_pos,snp_betahat in zip(chr_positions, chr_betahats)]
+        except FileNotFoundError:
+            print(f'No PLINK clump results for pval threshold {pval_thresh}')
+            clumped_betahat_list = []
+            
         return clumped_betahat_list
+        
+def run_plink_clump(args, bfile, betahat_fname, plink_path, betahat_list, pval_thresh_list):
+        r'''
+        Run PLINK --clump to get set of SNPs for PRS
+        '''
+        
+        plink_clump_map = partial(_plink_clump, args, bfile, betahat_fname,
+                                  plink_path, betahat_list)
+        n_threads = cpu_count()
+        pool = Pool(n_threads)
+        clumped_betahat_lists = pool.map(plink_clump_map, pval_thresh_list) # parallelize    
+        pool.close()
+        pool.join()
+        
+        return clumped_betahat_lists
 
 def run_SBayesR(args, gctb_path, bfile, ldm_type='full'):
         r'''
@@ -889,7 +910,6 @@ def _mcmc(args, sst_dict_list, ld_list, chrom_idx):
         beta_mrg = np.expand_dims(beta_mrg, axis=1)
         maf = np.array(sst_dict['MAF']).T
         n_pst = (n_iter-n_burnin)/thin
-#                p = len(sst_dict['SNP'])
         p = len(sst_dict['BETA'])
         n_blk = len(ld_blk)
 
@@ -909,8 +929,6 @@ def _mcmc(args, sst_dict_list, ld_list, chrom_idx):
 
         # MCMC
         for itr in range(1,n_iter+1):
-#                        if itr % 100 == 0:
-#                                to_log(args=args, string='--- iter-' + str(itr) + ' ---')
 
                 mm = 0; quad = 0.0
                 for kk in range(n_blk):
@@ -1014,6 +1032,17 @@ if __name__ == '__main__':
         args, ts_list_all, ts_list_geno_all, m, m_start, m_total, m_geno, m_geno_start, \
         m_geno_total, n_pops, genotyped_list_index = sim_ts(args=args, rec_map_path=rec_map_path)
         to_log(args=args, string=f'sim_ts time: {round((dt.now()-start_sim_ts).seconds/60, 2)} min\n')
+        
+        use_recmap = True if args.rec_map else False
+        bfile =  f'tmp_ng{args.n_gwas}.nt{args.n_test}.nr{args.n_ref}.' # bfile prefix of PLINK files of reference set; also used as uniq identifier for simulation
+        bfile += f'mpc{args.m_per_chr}.nc{args.n_chr}.h2{args.h2_A}.'
+        bfile += f'p{args.p_causal}.sam{args.sim_after_maf}.'
+        bfile += f'rm{use_recmap}.s{args.seed}'
+        for chr_idx in range(args.n_chr):
+            path = f'{bfile}.chr{chr_idx+1}.treesequence'
+            ts_list_all[chr_idx].dump(path=path)
+            
+        ts_list_all = [tskit.load(path=f'{bfile}.chr{chr_idx+1}.treesequence') for chr_idx in range(args.n_chr)]
 
         # split into ref and non-ref (non-ref will have both the gwas and test sets)
         ts_list_ref, ts_list_nonref = split(ts_list_both=ts_list_all,
@@ -1075,11 +1104,17 @@ if __name__ == '__main__':
                 # joint MAF filter ref, gwas, and test cohorts
                 # TODO: remove necessity of passing args to this function to get n_chr
                 start_joint_maf = dt.now()
+                # OLD
                 ts_list_ref, ts_list_gwas, ts_list_test = joint_maf_filter(ts_list_ref,
                                                                            ts_list_gwas,
                                                                            ts_list_test,
                                                                            args=args,
                                                                            maf=args.maf)
+#                ts_list_ref, ts_list_gwas = joint_maf_filter(ts_list_ref,
+#                                                             ts_list_gwas,
+#                                                             args=args,
+#                                                             maf=args.maf)
+                
 
         # get causal variant indices for the GWAS cohort
         causal_idx_pheno_gwas_list = get_shared_var_idxs(ts_pheno_A_list, ts_list_nonref)
@@ -1141,9 +1176,13 @@ if __name__ == '__main__':
         # run PLINK clumping and get clumped betahats
         to_log(args=args, string=f'running PLINK clumping')
         start_plink_clump = dt.now()
-        clumped_betahat_list = plink_clump(args=args, ts_list=ts_list_ref, bfile=bfile,
-                                              betahat_fname=betahat_fname, plink_path=plink_path,
-                                              betahat_list = betahat_A_list)
+        pval_thresh_list = [1, 1e-3, 1e-5, 1e-6, 1e-7,1e-8] # list of p-value threshold to try
+        clumped_betahat_lists = run_plink_clump(args=args, 
+                                                bfile=bfile,
+                                                betahat_fname=betahat_fname, 
+                                                plink_path=plink_path,
+                                                betahat_list = betahat_A_list,
+                                                pval_thresh_list=pval_thresh_list)
         to_log(args=args, string=f'plink_clump time: {round((dt.now()-start_plink_clump).seconds/60, 2)} min\n')
 
         # run SBayesR with GCTB and convert betas
@@ -1177,22 +1216,29 @@ if __name__ == '__main__':
 
         # calculate beta/betahat and y/yhat correlations for unadjusted GWAS
         to_log(args=args, string=f'\ncorr for unadj. betas (m={m_total})')
-        calc_corr(args=args,
-                  causal_idx_pheno_list=causal_idx_pheno_list,
-                  causal_idx_list=causal_idx_test_list,
-                  beta_est_list=betahat_A_list,
-                  y_test=y_test,
-                  ts_list_test=ts_list_test)
+        try:
+            calc_corr(args=args,
+                      causal_idx_pheno_list=causal_idx_pheno_list,
+                      causal_idx_list=causal_idx_test_list,
+                      beta_est_list=betahat_A_list,
+                      y_test=y_test,
+                      ts_list_test=ts_list_test)
+        except:
+            print('calc corre for unadj. betas failed')
         
         # calculate beta/betahat and y/yhat correlations for clumped GWAS
-        to_log(args=args, string=f'\ncorr for clumped betas (m={m_total})')
-        calc_corr(args=args,
-                  causal_idx_pheno_list=causal_idx_pheno_list,
-                  causal_idx_list=causal_idx_test_list,
-                  beta_est_list=clumped_betahat_list,
-                  y_test=y_test,
-                  ts_list_test=ts_list_test)
-
+        for idx, clumped_betahat_list in enumerate(clumped_betahat_lists):
+            pval_thresh = pval_thresh_list[idx]
+            if len(clumped_betahat_list)>0: # if list is not empty
+                to_log(args=args, string=f'\ncorr for clumped betas (pval={pval_thresh})')
+                calc_corr(args=args,
+                          causal_idx_pheno_list=causal_idx_pheno_list,
+                          causal_idx_list=causal_idx_test_list,
+                          beta_est_list=clumped_betahat_list,
+                          y_test=y_test,
+                          ts_list_test=ts_list_test)
+            else:
+                to_log(args=args, string=f'\ncorr for clumped betas (pval={pval_thresh})\nERROR: No SNPs with pval<{pval_thresh}')
 
         # calculate beta/betahat and y/yhat correlations for SBayesR
         if args.sbr and sbr_successful:
