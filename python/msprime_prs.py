@@ -37,12 +37,10 @@ import tskit # installed with msprime, v0.2.3
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--n_gwas', default=10000, type=int,
         help='Number of individuals in the discovery GWAS.')
-parser.add_argument('--n_ref', default=1000, type=int,
-        help='Number of individuals in LD reference panel.')
-parser.add_argument('--n_train', default=2000, type=int,
-        help='Number of individuals in the training set for PLINK clumping.')
 parser.add_argument('--n_test', default=2000, type=int,
         help='Number of individuals in the holdout set for testing PRS.')
+parser.add_argument('--n_ref', default=1000, type=int,
+        help='Number of individuals in reference panel.')
 parser.add_argument('--m_per_chr', default=1000000, type=int,
         help='Length of the region for each chromosome.')
 parser.add_argument('--n_chr', default=1, type=int,
@@ -168,10 +166,9 @@ def get_common_mutations_ts(tree_sequence, maf=0.05, args=None):
         new_tree_sequence = tables.tree_sequence()
         return new_tree_sequence
 
-def sim_ts(args, rec_map_path, maf=0):
+def sim_ts(args, rec_map_path):
         r'''
-        Simulate tree sequences using out-of-Africa model. 
-        Only returns SNPs with MAF>`maf`
+        Simulate tree sequences using out-of-Africa model
         '''
         def initialise(args):
                 ts_list = []
@@ -280,7 +277,7 @@ def sim_ts(args, rec_map_path, maf=0):
                 rec_map_list = [None for x in range(args.n_chr)]
 
         # simulate with out-of-Africa model
-        n_total = args.n_ref + args.n_gwas + args.n_train + args.n_test
+        n_total = args.n_gwas + args.n_test + args.n_ref
         sample_size = [0, n_total, 0] #only set EUR (2nd element in list) sample size to be greater than 0
         pop_configs, migration_mat, demographic_events, Ne, n_pops = out_of_africa(sample_size)
 
@@ -303,8 +300,8 @@ def sim_ts(args, rec_map_path, maf=0):
                                                     mutation_rate=args.mut,
                                                     random_seed=random_seed))
 
-                #  get mutations w/ MAF>maf
-                ts_list_all[chr_idx] = get_common_mutations_ts(ts_list_all[chr_idx], maf=maf, args=args) # comment out to run later phenotype simulation with causal SNPs not genotyped
+                #  get mutations w/ MAF>0
+                ts_list_all[chr_idx] = get_common_mutations_ts(ts_list_all[chr_idx], maf=0, args=args) # comment out to run later phenotype simulation with causal SNPs not genotyped
 
                 m[chr_idx] = int(ts_list_all[chr_idx].get_num_mutations())
                 m_start[chr_idx] = m_total
@@ -351,30 +348,12 @@ def split(ts_list_both, n1):
         split `ts_list_both` into two, with the first half containing the first
         `n1` samples.
         '''
-        ts_list1 = [ts.simplify(samples=ts.samples()[:2*n1]) for ts in ts_list_both] # first 2*args.n_ref haplotypes in tree sequence are ref individuals
-        ts_list2 = [ts.simplify(samples=ts.samples()[2*n1:]) for ts in ts_list_both] # all but first 2*args.n_ref haplotypes in tree sequence are non-ref individuals
+        ts_list1 = [ts.simplify(samples=ts.samples()[:2*n1]) for ts in ts_list_both] # first 2*args.n_ref samples in tree sequence are ref individuals
+        ts_list2 = [ts.simplify(samples=ts.samples()[2*n1:]) for ts in ts_list_both] # all but first 2*args.n_ref samples in tree sequence are non-ref individuals
 
         return ts_list1, ts_list2
-    
-def partition(ts_list_all, n_list):
-        r'''
-        split `ts_list_both` into len(n_list) partitions, with the ith partition
-        containing n_list[i] samples
-        '''
-        assert all([sum(n_list)==len(ts.samples())/2 for ts in ts_list_all]), 'sum of n_list does not match total number of samples' # number of samples = (number of haplotypes)/2
-        
-        partitioned = [] # list of lists of tree sequences
-        
-        nhaps_cumsum = 0
-        
-        for n_curr in n_list:
-            nhaps_curr = 2*n_curr
-            partitioned.append([ts.simplify(samples=ts.samples()[nhaps_cumsum:nhaps_cumsum+nhaps_curr]) for ts in ts_list_all])
-            nhaps_cumsum += n_curr
-            
-        return partitioned
 
-def nextSNP_add(variant, index=None, standardize = True):
+def nextSNP_add(variant, index=None):
         r'''
         Get normalized genotypes for the given variant. Use `index` to subset to
         desired indiviuals
@@ -385,13 +364,11 @@ def nextSNP_add(variant, index=None, standardize = True):
                 var_tmp = np.array(variant.genotypes[0::2][index].astype(int)) + np.array(variant.genotypes[1::2][index].astype(int))
 
         # Additive term.
-        if standardize:
-            mean_X = np.mean(var_tmp)
-    #                p = mean_X / 2
-            # Evaluate the mean and then sd to normalise.
-            return (var_tmp - mean_X) / np.std(var_tmp)
-        else:
-            return var_tmp
+        mean_X = np.mean(var_tmp)
+#                p = mean_X / 2
+        # Evaluate the mean and then sd to normalise.
+        X_A = (var_tmp - mean_X) / np.std(var_tmp)
+        return X_A
 
 
 def sim_phen(args, n_pops, ts_list, m_total):
@@ -479,7 +456,7 @@ def joint_maf_filter(*ts_lists, args, maf=0.05):
         Filter to SNPs with MAF>`maf` in all tree sequence lists passed
         by the `ts_lists`
         '''
-        to_log(args=args, string=f'filtering to SNPs w/ MAF > {maf} for {len(ts_lists)} sets of samples')
+        to_log(args=args, string=f'filtering to SNPs w/ MAF > {args.maf} for {len(ts_lists)} sets of samples')
         for chr_idx in range(args.n_chr):
                 ts_dict = {'n_haps': [None for x in range(len(ts_lists))], # dictionary with values = lists (list of lists for sites, positions), each list for a different set of samples
                            'tables': [None for x in range(len(ts_lists))],
@@ -529,42 +506,6 @@ def joint_maf_filter(*ts_lists, args, maf=0.05):
                         ts_lists[idx][chr_idx] = tables.tree_sequence()
 
         return ts_lists
-    
-def get_shared_snps(*ts_lists, ts_list_a, args):
-        r'''
-        Filter tree sequence lists in `ts_lists` to SNPs shared with `ts_list_a`
-        '''
-        to_log(args=args, string=f'filtering to shared SNPs for {len(ts_lists)} sets of samples')
-        for chr_idx in range(args.n_chr):
-                ts = ts_list_a[chr_idx]
-                site_ids = [(site.position, site.ancestral_state) for tree in ts.trees() for site in tree.sites()]
-
-                for idx, ts_list in enumerate(ts_lists):
-                        ts = ts_list[chr_idx]
-                        tables = ts.dump_tables()
-                        tables.mutations.clear()
-                        tables.sites.clear()
-                        
-                        site_idx = 0
-                        curr_shared_site_pos = site_ids[site_idx][0]
-                        max_site_idx = len(site_ids)-1
-                        
-                        for tree in ts.trees():
-                                for site in tree.sites():
-                                        site_position = site.position
-                                        while curr_shared_site_pos < site_position and site_idx < max_site_idx:
-                                            site_idx += 1
-                                            curr_shared_site_pos = site_ids[site_idx][0]
-                                        if curr_shared_site_pos == site_position and site.ancestral_state==site_ids[site_idx][1]:
-                                            shared_site = tables.sites.add_row(
-                                                    position=site_position,
-                                                    ancestral_state=site.ancestral_state)
-                                            tables.mutations.add_row(
-                                                    site=shared_site,
-                                                    node=site.mutations[0].node,
-                                                    derived_state=site.mutations[0].derived_state)
-                        ts_lists[idx][chr_idx] = tables.tree_sequence()
-        return ts_lists
 
 
 def get_shared_var_idxs(ts_list1, ts_list2):
@@ -590,6 +531,7 @@ def run_gwas(args, y, ts_list_gwas):
         pval_A_list = [None for i in range(args.n_chr)] # list of np arrays (one for each chromosome) holding GWAS p-values
         se_A_list = [None for i in range(args.n_chr)] # list of np arrays (one for each chromosome) holding GWAS standard errors
         maf_A_list = [None for i in range(args.n_chr)] # list of np arrays (one for each chromosome) holding GWAS MAF
+#        pval_A_list = [None]*args.n_chr # list of np arrays (one for each chromosome) holding GWAS pvals
 
         n_gwas = int(ts_list_gwas[0].get_sample_size()/2 ) # assume that sample size is same across chromosomes
         for chr_idx in range(args.n_chr):
@@ -611,6 +553,7 @@ def run_gwas(args, y, ts_list_gwas):
                 betahat_A_list[chr_idx] = betahat_A
                 pval_A_list[chr_idx] = pval_A
                 se_A_list[chr_idx] = se_A
+#                pval_A_list[chr_idx] = pval_A
                 maf_A_list[chr_idx] = maf_A
 
         return betahat_A_list, maf_A_list, pval_A_list, se_A_list
@@ -620,7 +563,7 @@ def write_betahats(args, ts_list, beta_list, pval_list, se_list, betahat_fname):
         Write beta-hats to file in the .ma format: https://cnsgenomics.com/software/gctb/#SummaryBayesianAlphabet
         '''
         with open(betahat_fname,'w') as betahat_file:
-            betahat_file.write('SNP A1 A2 freq b se p N\n') # write header
+            betahat_file.write('SNP A1 A2 freq b se p N\n')
             n_haps = ts_list[0].get_sample_size()
             for chr_idx in range(args.n_chr):
                     betahat = beta_list[chr_idx]
@@ -676,7 +619,6 @@ def write_to_plink(args, ts_list, bfile, betahat_fname, plink_path):
                 subprocess.call(f'{plink_path} --silent --merge-list {mergelist_fname} --make-bed --out {bfile}'.split())
 
 def _plink_clump(args, bfile, betahat_fname, plink_path, betahat_list, pval_thresh):
-
         clump_p1 = pval_thresh
         clump_p2 = 1
         clump_r2 = 0.1
@@ -710,9 +652,6 @@ def _plink_clump(args, bfile, betahat_fname, plink_path, betahat_list, pval_thre
                     clumped_betahat_list[chr_idx] = [(snp_betahat if chr_pos in clumped_pos_list else 0) for chr_pos,snp_betahat in zip(chr_positions, chr_betahats)]
         except FileNotFoundError:
             print(f'No PLINK clump results for pval threshold {pval_thresh}')
-            clumped_betahat_list = []
-        except KeyError:
-            print(f'PLINK clump failed for pval threshold {pval_thresh}')
             clumped_betahat_list = []
             
         return clumped_betahat_list
@@ -810,7 +749,7 @@ def run_SBayesR(args, gctb_path, bfile, ldm_type='full'):
 
 
 def calc_corr(args, causal_idx_pheno_list, causal_idx_list, beta_est_list,
-              y_test, ts_list_test, only_h2_obs=False, standardize_gt=True):
+              y_test, ts_list_test, only_h2_obs=False):
         if not only_h2_obs:
                 for chr_idx in range(args.n_chr):
                         causal_idx_pheno = causal_idx_pheno_list[chr_idx]
@@ -824,7 +763,6 @@ def calc_corr(args, causal_idx_pheno_list, causal_idx_list, beta_est_list,
                         to_log(args=args, string=f'correlation between betas (chr {chr_idx+1}) : {round(r, 5)}')
 
         n = int(ts_list_test[0].get_sample_size()/2 )
-        print(f'sample size of ts_list_test: {n}')
         yhat = np.zeros(n)
         for chr_idx in range(args.n_chr):
                 ts_geno = ts_list_test[chr_idx]
@@ -837,10 +775,8 @@ def calc_corr(args, causal_idx_pheno_list, causal_idx_list, beta_est_list,
                         beta_est = np.zeros(shape=m_geno)
                         beta_est[causal_idx] = beta_est0[causal_idx_pheno]
                 for k, variant in enumerate(ts_geno.variants()):
-                        X_A = nextSNP_add(variant, standardize = standardize_gt)
-#                        print(X_A[0])
+                        X_A = nextSNP_add(variant)
                         yhat += X_A * beta_est[k]
-        print(np.vstack((y_test, yhat)))
         r = np.corrcoef(np.vstack((y_test, yhat)))[0,1]
         if only_h2_obs:
             to_log(args=args, string=f'h2 obs. (y w/ y_gen R^2): {round(r**2, 5)}')
@@ -853,7 +789,7 @@ def calc_ld(args, ts_list_ref):
         '''
         ld_list = []
         for chr_idx in range(args.n_chr):
-                X = ts_list_ref[chr_idx].genotype_matrix().astype('int8')
+                X = ts_list_ref[chr_idx].genotype_matrix()
                 ld = np.corrcoef(X)
                 ld_list.append([ld])
         return ld_list
@@ -1094,79 +1030,103 @@ if __name__ == '__main__':
         to_log(args=args, string=f'starting tree sequence sim')
         start_sim_ts = dt.now()
         args, ts_list_all, ts_list_geno_all, m, m_start, m_total, m_geno, m_geno_start, \
-        m_geno_total, n_pops, genotyped_list_index = sim_ts(args=args, 
-                                                            rec_map_path=rec_map_path,
-                                                            maf=0.01)
+        m_geno_total, n_pops, genotyped_list_index = sim_ts(args=args, rec_map_path=rec_map_path)
         to_log(args=args, string=f'sim_ts time: {round((dt.now()-start_sim_ts).seconds/60, 2)} min\n')
         
-#        # save tree sequences
-#        use_recmap = True if args.rec_map else False
-#        bfile =  f'tmp_ng{args.n_gwas}.nt{args.n_test}.nr{args.n_ref}.' # bfile prefix of PLINK files of reference set; also used as uniq identifier for simulation
-#        bfile += f'mpc{args.m_per_chr}.nc{args.n_chr}.h2{args.h2_A}.'
-#        bfile += f'p{args.p_causal}.sam{args.sim_after_maf}.'
-#        bfile += f'rm{use_recmap}.s{args.seed}'
-#        for chr_idx in range(args.n_chr):
-#            path = f'{bfile}.chr{chr_idx+1}.treesequence'
-#            ts_list_all[chr_idx].dump(path=path)
-#            
-#        # load tree sequence
-#        ts_list_all = [tskit.load(path=f'{bfile}.chr{chr_idx+1}.treesequence') for chr_idx in range(args.n_chr)]
+        use_recmap = True if args.rec_map else False
+        bfile =  f'tmp_ng{args.n_gwas}.nt{args.n_test}.nr{args.n_ref}.' # bfile prefix of PLINK files of reference set; also used as uniq identifier for simulation
+        bfile += f'mpc{args.m_per_chr}.nc{args.n_chr}.h2{args.h2_A}.'
+        bfile += f'p{args.p_causal}.sam{args.sim_after_maf}.'
+        bfile += f'rm{use_recmap}.s{args.seed}'
+        for chr_idx in range(args.n_chr):
+            path = f'{bfile}.chr{chr_idx+1}.treesequence'
+            ts_list_all[chr_idx].dump(path=path)
+            
+        ts_list_all = [tskit.load(path=f'{bfile}.chr{chr_idx+1}.treesequence') for chr_idx in range(args.n_chr)]
 
-        ts_list_ref, ts_list_nonref = split(ts_list_both = ts_list_all,
-                                            n1 = args.n_ref)
-        
-        to_log(args=args, string=f'starting phenotype sim')
-        start_sim_phen = dt.now()
-        y_nonref, beta_A_list, ts_pheno_A_list, causal_A_idx_list = sim_phen(args=args,
-                                                                      n_pops=n_pops,
-                                                                      ts_list=ts_list_nonref,
-                                                                      m_total=m_total)
-        assert y_nonref.shape[0] == args.n_gwas + args.n_train + args.n_test
-        y_gwas = y_nonref[:args.n_gwas] 
-        y_train = y_nonref[args.n_gwas : args.n_gwas+args.n_train]
-        y_test = y_nonref[args.n_gwas+args.n_train:]
+        # split into ref and non-ref (non-ref will have both the gwas and test sets)
+        ts_list_ref, ts_list_nonref = split(ts_list_both=ts_list_all,
+                                            n1=args.n_ref)
+
+        ## MAF filter before simulating phenotype
+        if args.sim_after_maf:
+                # joint MAF filter ref and non-ref
+                ts_list_ref, ts_list_nonref = joint_maf_filter(ts_list_ref,
+                                                               ts_list_nonref,
+                                                               args=args,
+                                                               maf=args.maf)
+
+                # simulate phenotype
+                to_log(args=args, string=f'starting phenotype sim')
+                start_sim_phen = dt.now()
+                y, beta_A_list, ts_pheno_A_list, causal_A_idx_list = sim_phen(args=args,
+                                                                              n_pops=n_pops,
+                                                                              ts_list=ts_list_nonref,
+                                                                              m_total=m_total)
+                assert y.shape[0] == args.n_gwas+args.n_test
+                y_gwas = y[:args.n_gwas] # take first n_gwas individuals, just like in the splitting of ts_list_nonref
+                y_test = y[args.n_gwas:] # take the complement of the first n_gwas individuals, just like in the splitting of ts_list_nonref
+                # TODO: Check that individuals are in the same order in ts_pheno_A_list and ts_list_nonref
+                to_log(args=args, string=f'sim_phen time: {round((dt.now()-start_sim_phen).seconds/60, 2)} min\n')
+
+                # split non-ref into gwas and test sets
+                ts_list_gwas, ts_list_test = split(ts_list_both=ts_list_nonref,
+                                                   n1=args.n_gwas)
+
+                # joint MAF filter ref, gwas, and test cohorts
+                # TODO: remove necessity of passing args to this function to get n_chr
+                start_joint_maf = dt.now()
+                ts_list_ref, ts_list_gwas, ts_list_test = joint_maf_filter(ts_list_ref,
+                                                                           ts_list_gwas,
+                                                                           ts_list_test,
+                                                                           args=args,
+                                                                           maf=args.maf)
+
+        ## MAF filter after simulating phenotype (reduces PRS accuracy)
+        else:
+                # simulate phenotype
+                to_log(args=args, string=f'starting phenotype sim')
+                start_sim_phen = dt.now()
+                y, beta_A_list, ts_pheno_A_list, causal_A_idx_list = sim_phen(args=args,
+                                                                              n_pops=n_pops,
+                                                                              ts_list=ts_list_nonref,
+                                                                              m_total=m_total)
+                assert y.shape[0] == args.n_gwas+args.n_test
+                y_gwas = y[:args.n_gwas] # take first n_gwas individuals, just like in the splitting of ts_list_nonref
+                y_test = y[args.n_gwas:] # take the complement of the first n_gwas individuals, just like in the splitting of ts_list_nonref
+                # TODO: Check that individuals are in the same order in ts_pheno_A_list and ts_list_nonref
+                to_log(args=args, string=f'sim_phen time: {round((dt.now()-start_sim_phen).seconds/60, 2)} min\n')
+
+                # split non-ref into gwas and test sets
+                ts_list_gwas, ts_list_test = split(ts_list_both=ts_list_nonref,
+                                                   n1=args.n_gwas)
+
+                # joint MAF filter ref, gwas, and test cohorts
+                # TODO: remove necessity of passing args to this function to get n_chr
+                start_joint_maf = dt.now()
+                # OLD
+                ts_list_ref, ts_list_gwas, ts_list_test = joint_maf_filter(ts_list_ref,
+                                                                           ts_list_gwas,
+                                                                           ts_list_test,
+                                                                           args=args,
+                                                                           maf=args.maf)
+#                ts_list_ref, ts_list_gwas = joint_maf_filter(ts_list_ref,
+#                                                             ts_list_gwas,
+#                                                             args=args,
+#                                                             maf=args.maf)
                 
-        # get causal variant indices
-#        causal_idx_pheno_list = get_shared_var_idxs(ts_pheno_A_list, ts_list_all)
-#        causal_idx_gwas_pheno_list = get_shared_var_idxs(ts_list_all, ts_pheno_A_list)
-        causal_idx_pheno_list = get_shared_var_idxs(ts_pheno_A_list, ts_list_nonref)
+
+        # get causal variant indices for the GWAS cohort
+        causal_idx_pheno_gwas_list = get_shared_var_idxs(ts_pheno_A_list, ts_list_nonref)
         causal_idx_gwas_pheno_list = get_shared_var_idxs(ts_list_nonref, ts_pheno_A_list)
 
-        # NOTE: This is an optional sanity check to see if simulated phenotype has the right h2
         calc_corr(args=args,
-                  causal_idx_pheno_list=causal_idx_pheno_list,
+                  causal_idx_pheno_list=causal_idx_pheno_gwas_list,
                   causal_idx_list=causal_idx_gwas_pheno_list,
                   beta_est_list=beta_A_list,
-#                  y_test=y,
-#                  ts_list_test=ts_list_all,
-                  y_test=y_nonref,
+                  y_test=y,
                   ts_list_test=ts_list_nonref,
                   only_h2_obs=True)
-        to_log(args=args, string=f'sim_phen time: {round((dt.now()-start_sim_phen).seconds/60, 2)} min\n')
-        
-        # split into sets
-#        n_list = [args.n_ref, args.n_gwas, args.n_train, args.n_test]
-#        ts_list_ref, ts_list_gwas, ts_list_train, ts_list_test = partition(ts_list_all=ts_list_all,
-#                                                                           n_list = n_list)
-        n_list = [args.n_gwas, args.n_train, args.n_test]
-        ts_list_gwas, ts_list_train, ts_list_test = partition(ts_list_all = ts_list_nonref,
-                                                              n_list = n_list)
-                
-        # MAF filter on GWAS discovery set
-        ts_list_gwas = [get_common_mutations_ts(ts, maf=args.maf, args=args) for ts in ts_list_gwas]
-        
-        # get intersection of polymorphic SNPs in GWAS discovery set and LD reference panel
-        ts_list_ref, ts_list_gwas = joint_maf_filter(ts_list_ref,
-                                                     ts_list_gwas,
-                                                     args=args,
-                                                     maf=0)
-        
-        # filter to SNPs in common with MAF-filtered GWAS discovery set
-        start_joint_maf = dt.now()
-        ts_list_train, ts_list_test = get_shared_snps(ts_list_train,
-                                                      ts_list_test,
-                                                      ts_list_a=ts_list_gwas,
-                                                      args=args)      
 
         # TODO: update _update_vars to remove extraneous code
         _, genotyped_list_index, m_total, m_geno_total = _update_vars(args=args,
@@ -1188,71 +1148,71 @@ if __name__ == '__main__':
                                                                       ts_list_gwas=ts_list_gwas)
         to_log(args=args, string=f'run gwas time: {round((dt.now()-start_run_gwas).seconds/60, 2)} min\n')
 
-#        # write beta-hats to file
-#        # .ma file format (required by SBayesR): SNP A1 A2 freq b se p N
-#        use_recmap = True if args.rec_map else False
-#        bfile =  f'tmp_ng{args.n_gwas}.nt{args.n_test}.nr{args.n_ref}.' # bfile prefix of PLINK files of reference set; also used as uniq identifier for simulation
-#        bfile += f'mpc{args.m_per_chr}.nc{args.n_chr}.h2{args.h2_A}.'
-#        bfile += f'p{args.p_causal}.sam{args.sim_after_maf}.'
-#        bfile += f'rm{use_recmap}.s{args.seed}'
-#        subprocess.call(f'rm {bfile}*'.split(), stderr=subprocess.DEVNULL) # remove existing files with this prefix
-#        betahat_fname = f'{bfile}.betahat.ma'
-#        write_betahats(args=args,
-#                       ts_list=ts_list_gwas,
-#                       beta_list=betahat_A_list,
-#                       pval_list=pval_A_list,
-#                       se_list=se_A_list,
-#                       betahat_fname=betahat_fname)
-#
-#        # For adding suffix to duplicates: https://groups.google.com/forum/#!topic/comp.lang.python/VyzA4ksBj24
-#
-#        # write ref samples to PLINK
-#        start_write_ref = dt.now()
-#        to_log(args=args, string=f'writing ref samples to PLINK')
-#        write_to_plink(args=args, ts_list=ts_list_ref, bfile=bfile,
-#                       betahat_fname=betahat_fname, plink_path=plink_path)
-#        to_log(args=args, string=f'write_to_plink time: {round((dt.now()-start_write_ref).seconds/60, 2)} min\n')
-#        
-#        # run PLINK clumping and get clumped betahats
-#        to_log(args=args, string=f'running PLINK clumping')
-#        start_plink_clump = dt.now()
-#        pval_thresh_list = np.logspace(0,-8,9) # list of p-value threshold to try
-#        clumped_betahat_lists = run_plink_clump(args=args, 
-#                                                bfile=bfile,
-#                                                betahat_fname=betahat_fname, 
-#                                                plink_path=plink_path,
-#                                                betahat_list = betahat_A_list,
-#                                                pval_thresh_list=pval_thresh_list)
-#        to_log(args=args, string=f'plink_clump time: {round((dt.now()-start_plink_clump).seconds/60, 2)} min\n')
-#
-#        # run SBayesR with GCTB and convert betas
-#        if args.sbr:
-#            try:
-#                sbayesr_betahat_list = run_SBayesR(args=args, gctb_path=gctb_path, bfile=bfile)
-#                sbr_successful = True
-#            except:
-#                print('SBayesR failed')                
-#                sbr_successful = False
-#
-#        # calculate LD matrix for PRS-CS
-#        to_log(args=args, string=f'calculating tskit ld matrix')
-#        start_calc_ld = dt.now()
-#        ld_list = calc_ld(args=args,
-#                          ts_list_ref=ts_list_ref)
-#        to_log(args=args, string=f'calc ld time: {round((dt.now()-start_calc_ld).seconds/60, 2)} min\n')
-#
-#        # run PRS-CS
-#        # TODO: Figure out ZeroDivisionError at s = min(1/lam, math.log(1+1/alpha+math.sqrt(1/math.pow(alpha,2)+2/alpha)))
-#        start_prs_cs = dt.now()
-#        try:
-#            prscs_betahat_list = prs_cs(args=args,
-#                                   betahat_A_list=betahat_A_list,
-#                                   maf_A_list=maf_A_list,
-#                                   ld_list=ld_list)
-#        except ZeroDivisionError:
-#            print('\nPRS-CS failed due to ZeroDivisionError\n')
-#            
-#        to_log(args=args, string=f'prs-cs time: {round((dt.now()-start_prs_cs).seconds/60, 2)} min\n')
+        # write beta-hats to file
+        # .ma file format (required by SBayesR): SNP A1 A2 freq b se p N
+        use_recmap = True if args.rec_map else False
+        bfile =  f'tmp_ng{args.n_gwas}.nt{args.n_test}.nr{args.n_ref}.' # bfile prefix of PLINK files of reference set; also used as uniq identifier for simulation
+        bfile += f'mpc{args.m_per_chr}.nc{args.n_chr}.h2{args.h2_A}.'
+        bfile += f'p{args.p_causal}.sam{args.sim_after_maf}.'
+        bfile += f'rm{use_recmap}.s{args.seed}'
+        subprocess.call(f'rm {bfile}*'.split(), stderr=subprocess.DEVNULL) # remove existing files with this prefix
+        betahat_fname = f'{bfile}.betahat.ma'
+        write_betahats(args=args,
+                       ts_list=ts_list_gwas,
+                       beta_list=betahat_A_list,
+                       pval_list=pval_A_list,
+                       se_list=se_A_list,
+                       betahat_fname=betahat_fname)
+
+        # For adding suffix to duplicates: https://groups.google.com/forum/#!topic/comp.lang.python/VyzA4ksBj24
+
+        # write ref samples to PLINK
+        start_write_ref = dt.now()
+        to_log(args=args, string=f'writing ref samples to PLINK')
+        write_to_plink(args=args, ts_list=ts_list_ref, bfile=bfile,
+                       betahat_fname=betahat_fname, plink_path=plink_path)
+        to_log(args=args, string=f'write_to_plink time: {round((dt.now()-start_write_ref).seconds/60, 2)} min\n')
+        
+        # run PLINK clumping and get clumped betahats
+        to_log(args=args, string=f'running PLINK clumping')
+        start_plink_clump = dt.now()
+        pval_thresh_list = [1, 1e-3, 1e-5, 1e-6, 1e-7,1e-8] # list of p-value threshold to try
+        clumped_betahat_lists = run_plink_clump(args=args, 
+                                                bfile=bfile,
+                                                betahat_fname=betahat_fname, 
+                                                plink_path=plink_path,
+                                                betahat_list = betahat_A_list,
+                                                pval_thresh_list=pval_thresh_list)
+        to_log(args=args, string=f'plink_clump time: {round((dt.now()-start_plink_clump).seconds/60, 2)} min\n')
+
+        # run SBayesR with GCTB and convert betas
+        if args.sbr:
+            try:
+                sbayesr_betahat_list = run_SBayesR(args=args, gctb_path=gctb_path, bfile=bfile)
+                sbr_successful = True
+            except:
+                print('SBayesR failed')                
+                sbr_successful = False
+
+        # calculate LD matrix for PRS-CS
+        to_log(args=args, string=f'calculating tskit ld matrix')
+        start_calc_ld = dt.now()
+        ld_list = calc_ld(args=args,
+                          ts_list_ref=ts_list_ref)
+        to_log(args=args, string=f'calc ld time: {round((dt.now()-start_calc_ld).seconds/60, 2)} min\n')
+
+        # run PRS-CS
+        # TODO: Figure out ZeroDivisionError at s = min(1/lam, math.log(1+1/alpha+math.sqrt(1/math.pow(alpha,2)+2/alpha)))
+        start_prs_cs = dt.now()
+        try:
+            prscs_betahat_list = prs_cs(args=args,
+                                   betahat_A_list=betahat_A_list,
+                                   maf_A_list=maf_A_list,
+                                   ld_list=ld_list)
+        except ZeroDivisionError:
+            print('\nPRS-CS failed due to ZeroDivisionError\n')
+            
+        to_log(args=args, string=f'prs-cs time: {round((dt.now()-start_prs_cs).seconds/60, 2)} min\n')
 
         # calculate beta/betahat and y/yhat correlations for unadjusted GWAS
         to_log(args=args, string=f'\ncorr for unadj. betas (m={m_total})')
@@ -1266,38 +1226,38 @@ if __name__ == '__main__':
         except:
             print('calc corre for unadj. betas failed')
         
-#        # calculate beta/betahat and y/yhat correlations for clumped GWAS
-#        for idx, clumped_betahat_list in enumerate(clumped_betahat_lists):
-#            pval_thresh = pval_thresh_list[idx]
-#            if len(clumped_betahat_list)>0: # if list is not empty
-#                to_log(args=args, string=f'\ncorr for clumped betas (pval={pval_thresh})')
-#                calc_corr(args=args,
-#                          causal_idx_pheno_list=causal_idx_pheno_list,
-#                          causal_idx_list=causal_idx_test_list,
-#                          beta_est_list=clumped_betahat_list,
-#                          y_test=y_test,
-#                          ts_list_test=ts_list_test)
-#            else:
-#                to_log(args=args, string=f'\ncorr for clumped betas (pval={pval_thresh})\nERROR: No SNPs with pval<{pval_thresh}')
-#
-#        # calculate beta/betahat and y/yhat correlations for SBayesR
-#        if args.sbr and sbr_successful:
-#            to_log(args=args, string=f'\ncorr for SBayesR (m={m_total})')
-#            calc_corr(args=args,
-#                      causal_idx_pheno_list=causal_idx_pheno_list,
-#                      causal_idx_list=causal_idx_test_list,
-#                      beta_est_list=sbayesr_betahat_list,
-#                      y_test=y_test,
-#                      ts_list_test=ts_list_test)
-#
-#        # calculate beta/betahat and y/yhat correlations for PRS-CS
-#        to_log(args=args, string=f'\ncorr for PRS-CS (m={m_total})')
-#        calc_corr(args=args,
-#                  causal_idx_pheno_list=causal_idx_pheno_list,
-#                  causal_idx_list=causal_idx_test_list,
-#                  beta_est_list=prscs_betahat_list,
-#                  y_test=y_test,
-#                  ts_list_test=ts_list_test)
+        # calculate beta/betahat and y/yhat correlations for clumped GWAS
+        for idx, clumped_betahat_list in enumerate(clumped_betahat_lists):
+            pval_thresh = pval_thresh_list[idx]
+            if len(clumped_betahat_list)>0: # if list is not empty
+                to_log(args=args, string=f'\ncorr for clumped betas (pval={pval_thresh})')
+                calc_corr(args=args,
+                          causal_idx_pheno_list=causal_idx_pheno_list,
+                          causal_idx_list=causal_idx_test_list,
+                          beta_est_list=clumped_betahat_list,
+                          y_test=y_test,
+                          ts_list_test=ts_list_test)
+            else:
+                to_log(args=args, string=f'\ncorr for clumped betas (pval={pval_thresh})\nERROR: No SNPs with pval<{pval_thresh}')
+
+        # calculate beta/betahat and y/yhat correlations for SBayesR
+        if args.sbr and sbr_successful:
+            to_log(args=args, string=f'\ncorr for SBayesR (m={m_total})')
+            calc_corr(args=args,
+                      causal_idx_pheno_list=causal_idx_pheno_list,
+                      causal_idx_list=causal_idx_test_list,
+                      beta_est_list=sbayesr_betahat_list,
+                      y_test=y_test,
+                      ts_list_test=ts_list_test)
+
+        # calculate beta/betahat and y/yhat correlations for PRS-CS
+        to_log(args=args, string=f'\ncorr for PRS-CS (m={m_total})')
+        calc_corr(args=args,
+                  causal_idx_pheno_list=causal_idx_pheno_list,
+                  causal_idx_list=causal_idx_test_list,
+                  beta_est_list=prscs_betahat_list,
+                  y_test=y_test,
+                  ts_list_test=ts_list_test)
 
         to_log(args=args, string=f'total time: {round((dt.now()-start_sim_ts).seconds/60, 2)} min\n')
 
