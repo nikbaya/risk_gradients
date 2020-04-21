@@ -284,7 +284,7 @@ def sim_ts(args, rec_map_path):
                                                   population_configurations=pop_configs,
                                                   migration_matrix=migration_mat,
                                                   demographic_events=demographic_events,
-                                                  recombination_map=rec_map_list[chr_idx],
+                                                  recombination_map=rec_map,
                                                   length=None,
                                                   Ne=Ne,
                                                   recombination_rate=None,
