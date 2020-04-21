@@ -507,3 +507,23 @@ plt.ylabel('1/R^2')
 plt.xlabel('1/N')
 plt.title(f'Inverse R^2 between PRS and simulated phenotype\nas a function of inverse training set size (PRS-CS, chr22, h2=0.75, pi=1)')
 fig.savefig(f'{local_wd}plots/inv_n_train_inv_R2.chr22.prs_cs.phi_1e-04.h2_0.75.pi_1.png',dpi=300)
+
+
+
+
+df = pd.read_csv('/Users/nbaya/Documents/lab/risk_gradients/data/genetic_map_chr1_combined_b37.txt',
+                 delim_whitespace=True)
+df = df.rename(columns={'COMBINED_rate(cM/Mb)':'rate'})
+rec_rate_thresh = 50
+peak_radius = 500000 # radius in base pairs around a local peak in recombination rate
+max_ldblk_len = peak_radius*10 # maximum length of an LD block in base pairs
+hotspot_idx = [1758, 2575, 5155, 7170, 8527, 11131, 11483, 13281, 14332, 17449, 20437, 22337, 24575, 27431, 27937, 29128, 31319, 32379, 33252, 33889, 34677, 36076, 36455, 37395, 41123, 44278, 46088, 50876, 51691, 53637, 55089, 56365, 57665, 62467, 65353, 66764, 71744, 75911, 76883, 79257, 79993, 83874, 86524, 87976, 89389, 91070, 92415, 93520, 95853, 96478, 100319, 102392, 104411, 105519, 108481, 109629, 116434, 117094, 118098, 118607, 122249, 124240, 126565, 127989, 131556, 133297, 136159, 136161, 139509, 140574, 142655, 143887, 144548, 146154, 148654, 150100, 151328, 152664, 153614, 155020, 156791, 158867, 160605, 162991, 164526, 165375, 168042, 170041, 172518, 174987, 176113, 177109, 178546, 181691, 182664, 184002, 184851, 185822, 187023, 189044, 193789, 194718, 195463, 197772, 199372, 201334, 202956, 208709, 209850, 212921, 213629, 215377, 217522, 218403, 223938, 224028, 225742, 227052, 228296, 230715, 233027, 234499, 235372, 236365, 237452, 238460, 239450, 240661, 241332, 243534, 244495, 245816, 248198]
+
+plt.plot(df.position, df.rate)
+plt.axhline(y=50, ls='--', alpha=0.5, c = 'k')
+plt.errorbar(df.loc[hotspot_idx].position, [80+ np.random.normal(scale=2) for _ in hotspot_idx],xerr =peak_radius, 
+             fmt='r.', elinewidth=2)
+plt.xlim([0, 2e7])
+plt.xlabel('position (base pairs)')
+plt.ylabel('Recombination rate (cM/Mb)')
+plt.savefig('/Users/nbaya/Downloads/ldblocks.png',dpi=300)
