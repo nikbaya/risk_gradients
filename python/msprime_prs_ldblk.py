@@ -264,10 +264,16 @@ def sim_ts(args, rec_map_path):
         else: # if not using real recombination maps, use uniform recombination map
                 for chr_idx in range(args.n_chr):
                         m_chr = int(args.m_total/args.n_chr)
-                        rec_map = msprime.RecombinationMap.uniform_map(length=m_chr,
+                        n_ldblks_per_chr = 100 # number of LD blocks per chromosome
+                        num_loci = m_chr/n_ldblks_per_chr # num loci per LD block
+                        rec_map = msprime.RecombinationMap.uniform_map(length=num_loci,
                                                                        rate=args.rec,
-                                                                       num_loci=m_chr)
+                                                                       num_loci=num_loci)
                         rec_map_list[chr_idx].append(rec_map)
+                        first_position_list[chr_idx] = np.arange(0,n_ldblks_per_chr)*num_loci
+                        
+        print(rec_map_list)
+        print(first_position_list)
 
         # simulate with out-of-Africa model
         n_total = args.n_gwas + args.n_test + args.n_ref
