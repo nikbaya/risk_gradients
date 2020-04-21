@@ -9,7 +9,7 @@ To setup VM:
 conda create -n msprime -y -q python=3.6.10 numpy=1.18.1 scipy=1.4.1 pandas=1.0.1 # create conda environment named msprime and install msprime dependencies
 conda activate msprime # activate msprime environment
 conda install -y -c conda-forge msprime=0.7.4 # install msprime Python package
-wget -O msprime_prs.py https://raw.githubusercontent.com/nikbaya/risk_gradients/master/python/msprime_prs_ldblk.py && chmod +x msprime_prs_ldblk.py
+wget -O msprime_prs_ldblk.py https://raw.githubusercontent.com/nikbaya/risk_gradients/master/python/msprime_prs_ldblk.py && chmod +x msprime_prs_ldblk.py
 
 @author: nbaya
 """
@@ -287,7 +287,7 @@ def sim_ts(args, rec_map_path):
                                                   recombination_map=rec_map_list[chr_idx],
                                                   length=None,
                                                   Ne=Ne,
-                                                  recombination_rate=args.rec,
+                                                  recombination_rate=None,
                                                   mutation_rate=args.mut,
                                                   random_seed=random_seed)
         
