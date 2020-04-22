@@ -217,23 +217,6 @@ def _out_of_africa(sample_size, no_migration=True):
                                                 ]
         # Return the output required for a simulation study.
         return pop_configs, migration_mat, demographic_events, N_A, n_pops
-            
-def _msprime_sim(rec_map_idx):
-        rec_map = rec_map_list[chr_idx][rec_map_idx]
-        ts_all = msprime.simulate(sample_size=None, #set to None because sample_size info is stored in pop_configs
-                                  population_configurations=pop_configs,
-                                  migration_matrix=migration_mat,
-                                  demographic_events=demographic_events,
-                                  recombination_map=rec_map,
-                                  length=None,
-                                  Ne=Ne,
-                                  recombination_rate=None,
-                                  mutation_rate=args.mut,
-                                  random_seed=random_seed)
-        sim_maf = 0.01
-        ts_all = get_common_mutations_ts(ts_all, maf=sim_maf, args=args) # comment out to run later phenotype simulation with causal SNPs not genotyped
-        
-        return ts_all
 
 def create_ld_blocks(args, rec_map_path):
         # load recombination maps (from https://github.com/nikbaya/risk_gradients/tree/master/data)
@@ -256,6 +239,7 @@ def create_ld_blocks(args, rec_map_path):
                 for chr_idx in range(args.n_chr):
                         recmap_df = recmap_df_list[chr_idx]
                         m_chr = args.m_total*(max_position_list[chr_idx]/m_total_possible) # number of base pairs to simulate on current chromosome
+                        print(f'm_chr: {m_chr}')
                         first_position = 0 # first position of window defining current LD block (left-most side of window)
                         first_position_list[chr_idx].append(first_position)
                         peak_idx = None # index of hotspot in recmap dataframe
@@ -270,7 +254,6 @@ def create_ld_blocks(args, rec_map_path):
                                         peak_position = position
                                         peak_rate = rate
                                         continue
-                                    
                                 if peak_position != None and (position > peak_position+peak_radius or position > first_position+max_ldblk_len): # if current position is outside of peak radius and max ld block length
                                         hotspot_idx_list.append(peak_idx)
                                         first_position = position # first position of window defining current LD block (left-most side of window)
@@ -287,22 +270,19 @@ def create_ld_blocks(args, rec_map_path):
                                 hotspot_idx_list.insert(0,0) # create fake hotspot at first base pair position if it doesn't exist (useful for creating LD blocks later)
                         if hotspot_idx_list[-1] != recmap_df.index.max():
                                 hotspot_idx_list.append(recmap_df.index.max()) # create fake hotspot at last base pair position if it doesn't exist (useful for creating LD blocks later)
-                        print(hotspot_idx_list[:10])
-                        print(recmap_positions[:10])
-                        for idx, left_hotspot_idx, right_hotspot_idx in zip(range(len(hotspot_idx_list)-1), hotspot_idx_list[:-1], hotspot_idx_list[1:]):
+                        for left_hotspot_idx, right_hotspot_idx in zip(hotspot_idx_list[:-1], hotspot_idx_list[1:]):
                                 positions = recmap_positions[left_hotspot_idx:right_hotspot_idx]
-                                print(positions.min())
-                                print(first_position_list[chr_idx][idx])
-                                assert positions.min()==first_position_list[chr_idx][idx]
                                 positions -= positions.min()
                                 rates = recmap_rates[left_hotspot_idx:right_hotspot_idx]        
                                 rates[-1] = 0
                                 num_loci = int(m_chr*(max(positions)-min(positions))/max_position_list[chr_idx]) # number of loci for ld block scaled by size of ld block relative to current chrom
-                                assert num_loci >0
-                                rec_map = msprime.RecombinationMap(positions=positions.tolist(),
-                                                                   rates=rates,
-                                                                   num_loci=num_loci)
-                                rec_map_list.append(rec_map)
+                                if num_loci > 0:
+                                        rec_map = msprime.RecombinationMap(positions=positions.tolist(),
+                                                                           rates=rates,
+                                                                           num_loci=num_loci)
+                                else:
+                                        rec_map = None
+                                rec_map_list[chr_idx].append(rec_map)
         else: # if not using real recombination maps, use uniform recombination map
                 for chr_idx in range(args.n_chr):
                         m_chr = int(args.m_total/args.n_chr)
@@ -316,26 +296,117 @@ def create_ld_blocks(args, rec_map_path):
                         first_position_list[chr_idx] = (np.arange(0,n_ldblks_per_chr)*num_loci).tolist()
         for chr_idx in range(args.n_chr):                
                 print(f'No. of LD blocks in chrom {chr_idx+1}: {len(first_position_list[chr_idx])}')
-                print(f'Avg. length of LD block in chrom {chr_idx+1}: {np.diff(first_position_list[chr_idx]).mean()}')
-                print(f'SD of length of LD block in chrom {chr_idx+1}: {np.diff(first_position_list[chr_idx]).std()}')
+                print(f'\tAvg. length of LD block in chrom {chr_idx+1}: {np.diff(first_position_list[chr_idx]).mean()}')
+                print(f'\tSD of length of LD block in chrom {chr_idx+1}: {np.diff(first_position_list[chr_idx]).std()}')
 
         return rec_map_list, first_position_list
+            
+def _msprime_sim(rec_map_idx):
+        rec_map = rec_map_list[chr_idx][rec_map_idx]
+        ts_all = msprime.simulate(sample_size=None, #set to None because sample_size info is stored in pop_configs
+                                  population_configurations=pop_configs,
+                                  migration_matrix=migration_mat,
+                                  demographic_events=demographic_events,
+                                  recombination_map=rec_map,
+                                  length=None,
+                                  Ne=Ne,
+                                  recombination_rate=None,
+                                  mutation_rate=args.mut,
+                                  random_seed=random_seed)
+        sim_maf = 0.01
+        ts_all = get_common_mutations_ts(ts_all, maf=sim_maf, args=args) # comment out to run later phenotype simulation with causal SNPs not genotyped
+        
+        return ts_all
 
 def sim_ts(m_ldblk_list, ts_all_list, m_total, chr_idx):
         r'''
         Simulate tree sequences using out-of-Africa model for a given chromosome
         '''
-        n_threads = cpu_count() # number of threads to use
-        pool = Pool(n_threads)
-        ts_all_chr_list = pool.map(_msprime_sim, range(len(rec_map_list[chr_idx]))) # parallelize
+#        n_threads = cpu_count() # number of threads to use
+#        pool = Pool(n_threads)
+#        ts_all_chr_list = pool.map(_msprime_sim, range(len(rec_map_list[chr_idx]))) # parallelize
+#
+        ts_all_chr_list = []
+        for rec_map_idx, rec_map in enumerate(rec_map_list[chr_idx]):
+#                print(f'{chr_idx+1}:{rec_map_idx}')
+                ts_all_chr_list.append(_msprime_sim(rec_map_idx) if rec_map is not None else rec_map)
         
         for ts_all in ts_all_chr_list:
-                m_ldblk = int(ts_all.get_num_mutations())
+                if ts_all is not None:
+                        m_ldblk = int(ts_all.get_num_mutations())
+                else:
+                        m_ldblk = 0
                 m_ldblk_list[chr_idx].append(m_ldblk)
                 m_total += m_ldblk
                 ts_all_list.append(ts_all if m_ldblk>0 else None) # if no mutations in LD block don't append ts_all
 
         return ts_all_list, m_ldblk_list, m_total
+    
+def split(ts_list_both, n1):
+        r'''
+        split `ts_list_both` into two, with the first half containing the first
+        `n1` samples.
+        '''
+        ts_list1 = [ts.simplify(samples=ts.samples()[:2*n1]) for ts in ts_list_both] # first 2*args.n_ref samples in tree sequence are ref individuals
+        ts_list2 = [ts.simplify(samples=ts.samples()[2*n1:]) for ts in ts_list_both] # all but first 2*args.n_ref samples in tree sequence are non-ref individuals
+
+        return ts_list1, ts_list2
+    
+def joint_maf_filter(*ts_lists, args, maf=0.01):
+        r'''
+        Filter to SNPs with MAF>`maf` in all tree sequence lists passed
+        by the `ts_lists`
+        '''
+        to_log(args=args, string=f'filtering to SNPs w/ MAF > {args.maf} for {len(ts_lists)} sets of samples')
+        for chr_idx in range(args.n_chr):
+                ts_dict = {'n_haps': [None for x in range(len(ts_lists))], # dictionary with values = lists (list of lists for sites, positions), each list for a different set of samples
+                           'tables': [None for x in range(len(ts_lists))],
+                           'sites': [None for x in range(len(ts_lists))],
+                           'site_ids': [None for x in range(len(ts_lists))]}
+
+                for idx, ts_list in enumerate(ts_lists):
+                        ts = ts_list[chr_idx]
+
+                        n_haps = ts.get_sample_size()
+
+                        tables = ts.dump_tables()
+                        tables.mutations.clear()
+                        tables.sites.clear()
+
+                        sites = []
+                        for tree in ts.trees():
+                                for site in tree.sites():
+                                        f = tree.get_num_leaves(site.mutations[0].node) / n_haps # allele frequency
+                                        if f > args.maf and f < 1-args.maf:
+                                                sites.append(site)
+                        site_ids = [(site.position, site.ancestral_state) for site in sites]
+
+                        ts_dict['n_haps'][idx] = n_haps
+                        ts_dict['tables'][idx] = tables
+                        ts_dict['sites'][idx] = sites
+                        ts_dict['site_ids'][idx] = site_ids
+
+                shared_site_ids = set(ts_dict['site_ids'][0]).intersection(*ts_dict['site_ids'][1:])
+
+                ts_dict['sites'] = [[site for site in ts_dict['sites'][idx] \
+                                    if (site.position,site.ancestral_state) in shared_site_ids]
+                                    for idx,_ in enumerate(ts_lists)]
+
+                for idx, _ in enumerate(ts_lists):
+                        tables = ts_dict['tables'][idx]
+
+                        for site in ts_dict['sites'][idx]:
+                                shared_site = tables.sites.add_row(
+                                        position=site.position,
+                                        ancestral_state=site.ancestral_state)
+                                tables.mutations.add_row(
+                                        site=shared_site,
+                                        node=site.mutations[0].node,
+                                        derived_state=site.mutations[0].derived_state)
+
+                        ts_lists[idx][chr_idx] = tables.tree_sequence()
+
+        return ts_lists
                 
 
 if __name__=="__main__":
@@ -350,7 +421,7 @@ if __name__=="__main__":
         gctb_path, plink_path, rec_map_path = get_downloads(args=args)
 
         # set up recombination maps for ld blocks
-        to_log(args=args, string=f'creating LD blocks')
+        to_log(args=args, string=f'\n... creating LD blocks ...')
         start_create_ldblks = dt.now()
         rec_map_list, first_position_list = create_ld_blocks(args, rec_map_path)
         to_log(args=args, string=f'creating LD blocks time: {round((dt.now()-start_create_ldblks).seconds/60, 2)} min\n')
@@ -361,7 +432,7 @@ if __name__=="__main__":
         pop_configs, migration_mat, demographic_events, Ne, n_pops = _out_of_africa(sample_size)
 
         # simulate tree sequences 
-        to_log(args=args, string=f'starting tree sequence sim')
+        to_log(args=args, string=f'... starting tree sequence sim ...')
         start_sim_ts = dt.now()
         m_ldblk_list = [[] for _ in range(args.n_chr)] # list of lists of number of mutations per LD block per chromosome
         ts_all_list = [[] for _ in range(args.n_chr)] # list of lists of tree sequences per LD block per chromosome
@@ -378,51 +449,7 @@ if __name__=="__main__":
                 to_log(args=args, string=f'running total of sites : {m_total}')
         to_log(args=args, string=f'sim_ts time: {round((dt.now()-start_sim_ts).seconds/60, 2)} min\n')
         
-        
-        
-        
-'''
-for chr_idx in range(args.n_chr):
-                        recmap_df = recmap_df_list[chr_idx]
-                        
-                        pre_peak_positions = [] # list of base pair positions for LD block before current peak
-                        pre_peak_rates = [] # list of recombination rates for each LD block before current peak
-                        post_peak_positions = [] # list of base pair positions for LD block after current peak
-                        post_peak_rates = [] # list of recombination rates for LD block after current peak
-                        
-                        m_chr = args.m_total*(max_position_list[chr_idx]/m_total_possible) # Number of base pairs to simulate on current chromosome
-                        first_position = 0 # first position of window (left-most side of window)
-                        peak_position = None # 
-                        peak_rate = args.rec_rate_thresh # start at baseline of rec rate threshold
-                        for position, rate in zip(recmap_df.position, recmap_df.rate):
-                                if peak_position == None and rate > peak_rate: # if no peak position has been found yet
-                                        peak_position = position
-                                        peak_rate = rate
-                                        post_peak_positions.append(position)
-                                        post_peak_rates.append(float(rate)/1e8)
-                                if position > peak_position+peak_radius or position > first_position+max_ldblk_len: #
-                                        rates[-1] = 0 # set last base pair in recmap to have recombination rate of 0 (required by RecombinationMap)
-                                        first_position_list[chr_idx].append(first_position)
-                                        positions = np.asarray(positions)-first_position # translate to have first position be zero (required by RecombinationMap)
-                                        num_loci = int(positions.max()/max_position_list[chr_idx]*m_chr) # number of loci to simulate in LD block scaled according to base pairs on current chrom
-                                        if num_loci==0:
-                                                positions = np.arange(2)
-                                                rates = [0,0]
-                                                num_loci = 1
-                                        rec_map = msprime.RecombinationMap(positions=positions.tolist(),
-                                                                           rates=rates,
-                                                                           num_loci=num_loci)
-                                        rec_map_list[chr_idx].append(rec_map)
-                                        # reset to start of new LD block
-                                        first_position = position
-                                        positions = [position]
-                                        rates = [rate]
-                                        peak_rate = args.rec_rate_thresh
-                                        peak_position = position if rate > peak_rate else None
-                                elif rate > peak_rate: # new peak, still in same LD block
-                                        peak_rate = rate
-                                        peak_position = position
-                                else: # if not past the end of the chromosome and still in the same LD block
-                                        positions.append(position)
-                                        rates.append(float(rate)/1e8) # convert to base pair scale and per-generation scale
-'''
+        # split into ref and non-ref
+        for chr_idx in range(args.n_chr):
+                
+        split(ts_list_both, args.n_ref)
