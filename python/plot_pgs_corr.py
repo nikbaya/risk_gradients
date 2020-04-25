@@ -511,19 +511,78 @@ fig.savefig(f'{local_wd}plots/inv_n_train_inv_R2.chr22.prs_cs.phi_1e-04.h2_0.75.
 
 
 
-df = pd.read_csv('/Users/nbaya/Documents/lab/risk_gradients/data/genetic_map_chr1_combined_b37.txt',
-                 delim_whitespace=True)
-df = df.rename(columns={'COMBINED_rate(cM/Mb)':'rate'})
+df = pd.read_csv('/Users/nbaya/Documents/lab/risk_gradients/data/genetic_map_chr14_combined_b37.txt',
+                 delim_whitespace=True).rename(columns={'COMBINED_rate(cM/Mb)':'rate'})
+
 rec_rate_thresh = 50
 peak_radius = 500000 # radius in base pairs around a local peak in recombination rate
 max_ldblk_len = peak_radius*10 # maximum length of an LD block in base pairs
-hotspot_idx = [1758, 2575, 5155, 7170, 8527, 11131, 11483, 13281, 14332, 17449, 20437, 22337, 24575, 27431, 27937, 29128, 31319, 32379, 33252, 33889, 34677, 36076, 36455, 37395, 41123, 44278, 46088, 50876, 51691, 53637, 55089, 56365, 57665, 62467, 65353, 66764, 71744, 75911, 76883, 79257, 79993, 83874, 86524, 87976, 89389, 91070, 92415, 93520, 95853, 96478, 100319, 102392, 104411, 105519, 108481, 109629, 116434, 117094, 118098, 118607, 122249, 124240, 126565, 127989, 131556, 133297, 136159, 136161, 139509, 140574, 142655, 143887, 144548, 146154, 148654, 150100, 151328, 152664, 153614, 155020, 156791, 158867, 160605, 162991, 164526, 165375, 168042, 170041, 172518, 174987, 176113, 177109, 178546, 181691, 182664, 184002, 184851, 185822, 187023, 189044, 193789, 194718, 195463, 197772, 199372, 201334, 202956, 208709, 209850, 212921, 213629, 215377, 217522, 218403, 223938, 224028, 225742, 227052, 228296, 230715, 233027, 234499, 235372, 236365, 237452, 238460, 239450, 240661, 241332, 243534, 244495, 245816, 248198]
+# chr 1
+#hotspot_idx = [1758, 2575, 5155, 7170, 8527, 11131, 11483, 13281, 14332, 17449, 20437, 22337, 24575, 27431, 27937, 29128, 31319, 32379, 33252, 33889, 34677, 36076, 36455, 37395, 41123, 44278, 46088, 50876, 51691, 53637, 55089, 56365, 57665, 62467, 65353, 66764, 71744, 75911, 76883, 79257, 79993, 83874, 86524, 87976, 89389, 91070, 92415, 93520, 95853, 96478, 100319, 102392, 104411, 105519, 108481, 109629, 116434, 117094, 118098, 118607, 122249, 124240, 126565, 127989, 131556, 133297, 136159, 136161, 139509, 140574, 142655, 143887, 144548, 146154, 148654, 150100, 151328, 152664, 153614, 155020, 156791, 158867, 160605, 162991, 164526, 165375, 168042, 170041, 172518, 174987, 176113, 177109, 178546, 181691, 182664, 184002, 184851, 185822, 187023, 189044, 193789, 194718, 195463, 197772, 199372, 201334, 202956, 208709, 209850, 212921, 213629, 215377, 217522, 218403, 223938, 224028, 225742, 227052, 228296, 230715, 233027, 234499, 235372, 236365, 237452, 238460, 239450, 240661, 241332, 243534, 244495, 245816, 248198]
+# chr 14
+hotspot_idx = [731, 733, 2006, 3763, 4611, 5705, 6310, 7234, 8607, 10304, 11128, 11709, 13923, 16399, 18653, 21071, 27671, 28230, 29895, 31173, 32810, 34962, 38582, 41318, 44924, 48272, 51150, 51715, 55248, 61290, 61292, 67164, 70426, 71973, 72940, 75753, 81387, 82525, 83332, 85106, 86168, 87186, 88473, 90680, 92524, 93596, 95524, 97339, 98536, 100236]
 
 plt.plot(df.position, df.rate)
 plt.axhline(y=50, ls='--', alpha=0.5, c = 'k')
-plt.errorbar(df.loc[hotspot_idx].position, [80+ np.random.normal(scale=2) for _ in hotspot_idx],xerr =peak_radius, 
-             fmt='r.', elinewidth=2)
-plt.xlim([0, 2e7])
+plt.errorbar(df.loc[hotspot_idx].position, [80 for _ in hotspot_idx],xerr =peak_radius, 
+             fmt='r.', elinewidth=0)
+#plt.xlim([0, 2e7])
 plt.xlabel('position (base pairs)')
 plt.ylabel('Recombination rate (cM/Mb)')
 plt.savefig('/Users/nbaya/Downloads/ldblocks.png',dpi=300)
+
+
+
+# show the effect of changing num_loci
+df = pd.read_csv('/Users/nbaya/Documents/lab/risk_gradients/data/genetic_map_chr1_combined_b37.txt',
+                 delim_whitespace=True).rename(columns={'COMBINED_rate(cM/Mb)':'rate',
+                                                        'Genetic_Map(cM)':'cm'})
+num_loci = int(df.position.max())
+max_cm = df.cm.max()
+loci_cm_length = max_cm/num_loci
+rec_pos_list = []
+for loci_idx in range(num_loci-1):
+    end_of_locus_pos = df[df.cm <= (loci_idx+1)*loci_cm_length].position.tail(1).values[0]
+    rec_pos_list.append(end_of_locus_pos)
+
+fig,ax = plt.subplots(figsize=(1.2*6, 1.2*4))
+plt.plot(df.position, df.rate, lw=0.1)
+for pos in rec_pos_list:
+    plt.plot([pos, pos], [0,df.rate.max()], 'r-', lw = 0.1)
+plt.xlabel('position (base pairs)')
+plt.ylabel('Recombination rate (cM/Mb)')
+plt.legend(['Recombination rate','Recombination event'])
+plt.title(f'num_loci = {num_loci} (chrom 1)', size=15)
+plt.savefig(f'/Users/nbaya/Downloads/num_loci_{num_loci}.png',dpi=300)
+
+df1 = pd.read_csv('/Users/nbaya/Documents/lab/risk_gradients/data/genetic_map_chr1_combined_b37.txt',
+                 delim_whitespace=True).rename(columns={'COMBINED_rate(cM/Mb)':'rate',
+                                                        'Genetic_Map(cM)':'cm'})
+df2 = pd.read_csv('/Users/nbaya/Documents/lab/risk_gradients/data/genetic_map_chr2_combined_b37.txt',
+                 delim_whitespace=True).rename(columns={'COMBINED_rate(cM/Mb)':'rate',
+                                                        'Genetic_Map(cM)':'cm'})
+df2['cm'] = df2.cm+df1.cm.max()
+df2['position'] = df2.cm+df1.position.max()
+
+num_loci = 10
+rec_pos_list_list = []
+for df in [df1, df2]:
+    max_cm = df.cm.max()
+    loci_cm_length = (max_cm-df.cm.min())/num_loci
+    rec_pos_list = []
+    for loci_idx in range(num_loci-1):
+        end_of_locus_pos = df[df.cm <= df.cm.min()+(loci_idx+1)*loci_cm_length].position.tail(1).values[0]
+        rec_pos_list.append(end_of_locus_pos)
+    rec_pos_list_list += rec_pos_list
+
+fig,ax = plt.subplots(figsize=(1.2*6, 1.2*4))
+for df in [df1, df2]:
+    plt.plot(df.position, df.rate, lw=0.1)
+for pos in rec_pos_list_list:
+    plt.plot([pos, pos], [0,df.rate.max()], 'r-', lw = 5)
+plt.xlabel('position (base pairs)')
+plt.ylabel('Recombination rate (cM/Mb)')
+plt.legend(['Recombination rate','Recombination event'])
+plt.title(f'num_loci = {num_loci} (chrom 1)', size=15)
+plt.savefig(f'/Users/nbaya/Downloads/num_loci_{num_loci}.png',dpi=300)
+

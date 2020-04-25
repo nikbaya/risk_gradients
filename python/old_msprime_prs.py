@@ -1023,7 +1023,7 @@ if __name__ == '__main__':
 
         to_log(args=args, string=f'start time: {dt.now().strftime("%d/%m/%Y %H:%M:%S")}')
         to_log(args=args, string=args)
-
+r
         assert args.sbrprior in ['def','inf','ss'], 'ERROR: --sbrprior {args.sbrprior} is not allowed'
 
         # TODO: Consider adding argument for proportion of genome that is genotyped
@@ -1230,7 +1230,7 @@ if __name__ == '__main__':
                       y_test=y_test,
                       ts_list_test=ts_list_test)
         except:
-            print('calc corre for unadj. betas failed')
+            print('calc corr for unadj. betas failed')
 
         # calculate beta/betahat and y/yhat correlations for clumped GWAS
         for idx, clumped_betahat_list in enumerate(clumped_betahat_lists):
