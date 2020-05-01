@@ -5,60 +5,92 @@ Created on Sat Apr 25 11:41:43 2020
 
 @author: nbaya
 """
-
-import hail as hl
-import numpy as np
-from hail.linalg import BlockMatrix
-
-hl.init(log='/tmp/hail.log')
-
-#import matplotlib.pyplot as plt
 #
-##for M in np.logspace(3,4,2,dtype='int'):
-#for M in [10000]:
-#    
-#    # reference
-##    for N_ref in np.logspace(3,5,3, dtype='int'):
-#    for N_ref in [1000]:
-#        
-#        Z = np.random.multivariate_normal(mean=np.zeros(shape=N_ref), 
-#                                          cov=np.identity(N_ref))
-#    
-#        f = np.random.uniform(0.05,0.95,size=M)
-#        X = np.random.binomial(n=2, p=f, size=(N_ref, M)).astype('float')
-#        X -= X.mean(axis=0)
-#        X /= X.std(axis=0)
-#        
-#        E = (1/np.sqrt(N_ref))*(X.T)@Z
-#        
-#        R = (1/N_ref)*X.T@X
-#        
-#        for h2 in np.linspace(0.1, 0.5, 4):
-##            h2 = 0.2
-#            # infinitesimal
-#            alpha = np.random.normal(loc=0, scale=np.sqrt(h2/M), size=M)
-#            
-#            # spike & slab
-##            pi = 0.01
-##            alpha = np.random.normal(loc=0, scale=np.sqrt(h2/(pi*M)), size=M)
-#            
-#            beta = R@alpha
-#            
-#            # GWAS sumstats
-#            for N_d in np.logspace(3,6,4):
-##                N_d = 10000
-#                betahat = beta + (1/np.sqrt(N_d))*E
-#                alphahat = betahat
-#                
-#                r_beta = np.corrcoef(betahat, beta)[0,1]
-#                r = h2*(alphahat.T@R@alpha)/np.sqrt((alpha.T@R@alpha)*(alphahat.T@R@alphahat))
-#                
-#                print('-------------')
-#                print(f'M: {M}')
-#                print(f'N_ref: {N_ref}\tN_d: {int(round(N_d,0))}')
-#                print(f'h2: {h2}')
-#                print(f'beta r2: {r_beta**2}')
-#                print(f'r2: {r**2}')
+#import hail as hl
+#from hail.linalg import BlockMatrix
+#
+#hl.init(log='/tmp/hail.log')
+
+import numpy as np
+
+for M in [100]:
+    
+    for N in [10000]: # np.logspace(3,5,3, dtype='int')
+    
+#        f = np.random.uniform(0.05,0.95,size=M) # allele freqs
+#        X = np.random.binomial(n=2, p=0.5, size=(N, M)).astype('float')
+        X = np.random.normal(size=(N,M))
+        X -= X.mean(axis=0)
+        X /= X.std(axis=0)
+        
+        X_new = X.copy()        
+        
+        for i in range(10):
+            
+            X = X_new.copy()
+            
+            R = (1/N)*X.T@X
+            L = np.linalg.cholesky(R)
+            
+            L_inv = np.linalg.inv(L)
+            
+            X_alt = X@L_inv
+            
+            R_alt = (1/N)*X_alt.T@X_alt
+        
+        
+        def E():
+            Z = np.random.normal(0,1,size=N)
+            return (1/np.sqrt(N))*(X.T)@Z
+        
+        for h2 in [0.5]: #np.linspace(0.1, 0.5, 4):
+
+            # infinitesimal
+            alpha = np.random.normal(loc=0, scale=np.sqrt(h2/M), size=M)
+
+            # spike & slab
+#            pi = 0.01
+#            alpha = np.random.normal(loc=0, scale=np.sqrt(h2/(pi*M)), size=M)
+            
+            yg = X@alpha
+            
+            s2 = (1/N)*(yg.T)@(yg)
+            
+            alpha *= np.sqrt(h2/s2) # comment out later?
+            
+            beta = (1/N)*X.T@yg
+            
+            print(f'var(alpha)*M/h2 = {alpha.var()*M/h2}')
+            print(f'var(beta)*M/h2 = {beta.var()*M/h2}')
+            
+            print(f'corr(alpha, beta) = {np.corrcoef(alpha, beta)[0,1]}')
+            
+            # GWAS sumstats
+            for N_d in [1000000]: #np.logspace(3,6,4):
+                betahat = beta + (1/np.sqrt(N_d))*E()
+                
+                alphahat = betahat.copy()
+                
+                noise = np.random.normal(loc=0,scale=np.sqrt(1-h2),size=N)
+                noise *= np.sqrt(1-h2)/noise.std() # comment out later?
+                
+                y = yg + noise
+                
+#                print(f'var(yg): {yg.var()}')
+#                print(f'var(y): {y.var()}')
+                
+                yg_hat = X@alphahat
+                
+                # "true" r2 when calculating 
+                r2_true = np.corrcoef(y,yg_hat)[0,1]**2
+                r2_summ = (((1/N)*(yg.T)@(yg_hat))**2)/((1/N)*yg_hat.T@yg_hat)
+                
+                
+                print(f'r2_true: {r2_true}')
+                print(f'r2_summ: {r2_summ}')
+                
+                print(f'r2_daet: {h2/(1+M/(N_d*h2))}')
+                
 #            
 #            
 
@@ -73,11 +105,11 @@ if __name__=='__main__':
     N = X.shape[0]
     M = X.shape[1]
     
-    R = (1/N)*X.T@X
-    R_bm_path = f'{gs_bucket}/{ref_panel}.R.bm'
-    if not hl.hadoop_is_file(f'{R_bm_path}/_SUCCESS'):
-        R.write(R_bm_path)
-    R = BlockMatrix.read(R_bm_path)
+#    R = (1/N)*X.T@X
+#    R_bm_path = f'{gs_bucket}/{ref_panel}.R.bm'
+#    if not hl.hadoop_is_file(f'{R_bm_path}/_SUCCESS'):
+#        R.write(R_bm_path)
+#    R = BlockMatrix.read(R_bm_path)
     
     Z = np.random.multivariate_normal(mean=np.zeros(shape=N),
                                       cov=np.identity(n=N))
@@ -90,6 +122,8 @@ if __name__=='__main__':
         E.write(E_bm_path)
     E = BlockMatrix.read(E_bm_path)
         
+    seed = 1
+    np.random.seed(seed=seed)
     h2 = 0.2
     alpha = np.random.normal(loc=0, scale=np.sqrt(h2/M), size=M)
     alpha = BlockMatrix.from_numpy(alpha).T

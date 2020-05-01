@@ -3,7 +3,7 @@
 """
 Created on Wed Apr 29 07:39:01 2020
 
-Runs large-scale simulations for testing PRS-CS using:
+Runs large-scale tree sequence simulations using:
     - Flat recombination map
     - Modeling chromosomes as separate tree sequences
     - Hybrid simulations (discrete-time Wright-Fisher for recent past, coalescent for ancient past)
@@ -12,7 +12,6 @@ To setup VM:
 conda create -n msprime -y -q python=3.6.10 numpy=1.18.1 scipy=1.4.1 pandas=1.0.1 # create conda environment named msprime and install msprime dependencies
 conda activate msprime # activate msprime environment
 conda install -y -c conda-forge msprime=0.7.4 # install msprime Python package
-wget -O msprime_prs_ldblk.py https://raw.githubusercontent.com/nikbaya/risk_gradients/master/python/msprime_prs_ldblk.py && chmod +x msprime_prs_ldblk.py
 
 @author: nbaya
 """
@@ -44,8 +43,8 @@ parser.add_argument('--n_train', default=10000, type=int,
         help='Number of individuals used to train the PLINK clumping.')
 parser.add_argument('--n_test', default=2000, type=int,
         help='Number of individuals in the holdout set for testing PRS.')
-parser.add_argument('--m_total', default=1000000, type=int,
-        help='Total number of base pairs to simulate.')
+#parser.add_argument('--m_total', default=1000000, type=int,
+#        help='Total number of base pairs to simulate.')
 parser.add_argument('--n_chr', default=1, type=int,
         help='Number of chromosomes.')
 parser.add_argument('--maf', default=0.05, type=float,
@@ -69,8 +68,8 @@ parser.add_argument('--rec_map', default=False, type=str,
         'The filename should contain the symbol @, msprimesim will replace instances '
         'of @ with chromosome numbers. To use default recombination maps, pass '
         '"1" as the argument to this flag')
-parser.add_argument('--rec_rate_thresh', default=50, type=float,
-        help='Recombination rate.')
+#parser.add_argument('--rec_rate_thresh', default=50, type=float,
+#        help='Recombination rate.')
 #parser.add_argument('--sbr', action='store_true', default=False,
 #                    help='Whether to run SBayesR (default: False)')
 #parser.add_argument('--sbrprior', default='def', type=str,
@@ -86,11 +85,9 @@ def to_log(args, string):
         Prints string and sends it to the log file
         '''
         if args is not None:
-                use_recmap = True if args.rec_map else False
-                logfile =  f'ngwas_{args.n_gwas}.ntest_{args.n_test}.nref_{args.n_ref}.'
-                logfile += f'mtotal_{args.m_total}.nchr_{args.n_chr}.h2_{args.h2_A}.'
-                logfile += f'pcausal_{args.p_causal}.simaftermaf_{args.sim_after_maf}.'
-                logfile += f'recmap_{use_recmap}.seed_{args.seed}.log'
+                logfile =  f'ngwas_{args.n_gwas}.nref_{args.n_ref}.ntrain_{args.n_train}.ntest_{args.n_test}.'
+                logfile += f'nchr_{args.n_chr}.rec_{args.rec}.mut_{args.mut}.'
+                logfile += f'seed_{args.seed}.log'
                 if args.verbose:
                         print(string)
         else:
@@ -129,21 +126,21 @@ def get_downloads(args):
                 exit_code = subprocess.call(f'unzip -q {software_dir}/plink_linux_x86_64_20200219.zip -d {software_dir}'.split())
                 assert exit_code==0, f'unzip when downloading PLINK failed (exit code: {exit_code})'
 
-        if args.rec_map:
-                if Path(args.rec_map.replace('@','1')).exists(): # only check chr 1
-                        rec_map_path = args.rec_map
-                else:
-                        recmap_dir = home+'/recmaps'
-                        recmap_wget_url = 'https://raw.githubusercontent.com/nikbaya/risk_gradients/master/data/genetic_map_chr@_combined_b37.txt'
-                        for chr_idx in range(args.n_chr):
-                                chr_recmap_wget_url = recmap_wget_url.replace("@",f"{chr_idx+1}")
-                                if not Path(f'{recmap_dir}/{chr_recmap_wget_url.split("/")[-1]}').exists():
-                                        exit_code = subprocess.call(f'wget --quiet -nc {chr_recmap_wget_url} -P {recmap_dir}'.split())
-                                        assert exit_code==0, f'wget when downloading recmap for chr {chr_idx+1} failed (exit code: {exit_code})'
-                                        print(f'downloaded recmap for chr {chr_idx+1} (b37)')
-                        rec_map_path = f'{recmap_dir}/{recmap_wget_url.split("/")[-1]}'
-        else:
-            rec_map_path = None
+#        if args.rec_map:
+#                if Path(args.rec_map.replace('@','1')).exists(): # only check chr 1
+#                        rec_map_path = args.rec_map
+#                else:
+        recmap_dir = home+'/recmaps'
+        recmap_wget_url = 'https://raw.githubusercontent.com/nikbaya/risk_gradients/master/data/genetic_map_chr@_combined_b37.txt'
+        for chr_idx in range(22):
+                chr_recmap_wget_url = recmap_wget_url.replace("@",f"{chr_idx+1}")
+                if not Path(f'{recmap_dir}/{chr_recmap_wget_url.split("/")[-1]}').exists():
+                        exit_code = subprocess.call(f'wget --quiet -nc {chr_recmap_wget_url} -P {recmap_dir}'.split())
+                        assert exit_code==0, f'wget when downloading recmap for chr {chr_idx+1} failed (exit code: {exit_code})'
+                        print(f'downloaded recmap for chr {chr_idx+1} (b37)')
+        rec_map_path = f'{recmap_dir}/{recmap_wget_url.split("/")[-1]}'
+#        else:
+#            rec_map_path = None
 
         return gctb_path, plink_path, rec_map_path
 
@@ -247,10 +244,11 @@ def sim_ts(args, chrom, m_chr, population_configurations, migration_matrix, demo
                                   model='dtwf',
                                   random_seed=random_seed)
         
-        n_total = args.n_gwas+args.n_ref+args.n_trait+args.n_test
+        n_total = args.n_gwas+args.n_ref+args.n_train+args.n_test
         wd = os.getcwd()
         ts_fname = f'n_{n_total}.rec_{args.rec}.mut_{args.mut}.seed_{args.seed}.m_{m_chr}.chr_{chrom}.ts'
         ts_all.dump(path=f'{wd}/{ts_fname}')
+        to_log(args=args, string=f'wrote ts to: {wd}/{ts_fname}')
         
         if args.mut > 0:
                 sim_maf = 0.01
@@ -258,7 +256,7 @@ def sim_ts(args, chrom, m_chr, population_configurations, migration_matrix, demo
                 
                 ts_maf_fname = f'n_{n_total}.rec_{args.rec}.mut_{args.mut}.seed_{args.seed}.maf_{sim_maf}.m_{m_chr}.chr_{chrom}.ts'
                 ts_all.dump(path=f'{wd}/{ts_maf_fname}')
-        
+                to_log(args=args, string=f'wrote ts to: {wd}/{ts_maf_fname}')
         
 if __name__=="__main__":
         args = parser.parse_args()
@@ -266,7 +264,7 @@ if __name__=="__main__":
         to_log(args=args, string=f'start time: {dt.now().strftime("%d/%m/%Y %H:%M:%S")}')
         to_log(args=args, string=args)
 
-        assert args.sbrprior in ['def','inf','ss'], 'ERROR: --sbrprior {args.sbrprior} is not allowed'
+#        assert args.sbrprior in ['def','inf','ss'], 'ERROR: --sbrprior {args.sbrprior} is not allowed'
 
         # download gctb, plink and recombination maps
         gctb_path, plink_path, rec_map_path = get_downloads(args=args)
@@ -290,6 +288,7 @@ if __name__=="__main__":
                    m_chr=m_chr,
                    population_configurations=population_configurations,
                    migration_matrix=migration_matrix,
-                   demographic_events=demographic_events)
+                   demographic_events=demographic_events,
+                   Ne=Ne)
                     
-            
+        to_log(args=args, string=f'sim_ts time: {round((dt.now()-start_sim_ts).seconds/60, 2)} min\n')
